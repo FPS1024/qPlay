@@ -1,0 +1,5 @@
+add_subdirectory(core)
+add_subdirectory(library)
+add_subdirectory(mpv)
+add_subdirectory(video)
+add_subdirectory(app)
