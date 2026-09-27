@@ -4,14 +4,12 @@
 #include "library/media_library.h"
 
 #include <QObject>
-#include <QNetworkAccessManager>
-#include <QQueue>
-#include <QSet>
-#include <QSettings>
 #include <QTimer>
 #include <QUrl>
 #include <QVariantList>
+#include <QSet>
 
+class QNetworkAccessManager;
 namespace QuarkTV::Mpv { class MpvSession; }
 
 namespace QuarkTV::App {
@@ -32,7 +30,9 @@ class PlayerEngine final : public QObject
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(QString videoBackend READ videoBackend NOTIFY videoBackendChanged)
     Q_PROPERTY(QObject *renderSession READ renderSession CONSTANT)
-    Q_PROPERTY(QString tmdbApiKey READ tmdbApiKey WRITE setTmdbApiKey NOTIFY tmdbApiKeyChanged)
+    Q_PROPERTY(QString webDavUrl READ webDavUrl WRITE setWebDavUrl NOTIFY webDavSettingsChanged)
+    Q_PROPERTY(QString webDavUsername READ webDavUsername WRITE setWebDavUsername NOTIFY webDavSettingsChanged)
+    Q_PROPERTY(QString webDavPassword READ webDavPassword WRITE setWebDavPassword NOTIFY webDavSettingsChanged)
     Q_PROPERTY(QVariantList videoTracks READ videoTracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY tracksChanged)
@@ -41,6 +41,7 @@ class PlayerEngine final : public QObject
     Q_PROPERTY(int currentSubtitleTrack READ currentSubtitleTrack NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList playlist READ playlist NOTIFY playlistChanged)
     Q_PROPERTY(int playlistIndex READ playlistIndex NOTIFY playlistChanged)
+    Q_PROPERTY(int imageCacheRevision READ imageCacheRevision NOTIFY imageCacheChanged)
 
 public:
     explicit PlayerEngine(QObject *parent = nullptr);
@@ -62,8 +63,12 @@ public:
     [[nodiscard]] QString statusMessage() const;
     [[nodiscard]] QString videoBackend() const;
     [[nodiscard]] QObject *renderSession() const;
-    [[nodiscard]] QString tmdbApiKey() const;
-    void setTmdbApiKey(const QString &key);
+    [[nodiscard]] QString webDavUrl() const;
+    void setWebDavUrl(const QString &url);
+    [[nodiscard]] QString webDavUsername() const;
+    void setWebDavUsername(const QString &username);
+    [[nodiscard]] QString webDavPassword() const;
+    void setWebDavPassword(const QString &password);
     [[nodiscard]] QVariantList videoTracks() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QVariantList subtitleTracks() const;
@@ -72,6 +77,7 @@ public:
     [[nodiscard]] int currentSubtitleTrack() const noexcept;
     [[nodiscard]] QVariantList playlist() const;
     [[nodiscard]] int playlistIndex() const noexcept;
+    [[nodiscard]] int imageCacheRevision() const noexcept;
 
     Q_INVOKABLE void open(const QUrl &source);
     Q_INVOKABLE void openPath(const QString &path);
@@ -93,9 +99,7 @@ public:
     Q_INVOKABLE void previous();
     Q_INVOKABLE QVariantList recentMedia(int limit = 50) const;
     Q_INVOKABLE QVariantList libraryMedia(const QString &filter = {}) const;
-    Q_INVOKABLE int scanFolder(const QUrl &folderUrl);
-    Q_INVOKABLE int chooseAndScanFolder();
-    Q_INVOKABLE void enrichWithTmdb(const QUrl &source, const QString &filenameTitle);
+    Q_INVOKABLE QUrl cachedImageSource(const QString &remoteUrl, const QString &kind);
     Q_INVOKABLE bool setFavorite(const QUrl &source, bool favorite);
     Q_INVOKABLE bool removeRecent(const QUrl &source);
     Q_INVOKABLE void clearRecent();
@@ -118,7 +122,8 @@ signals:
     void tracksChanged();
     void playlistChanged();
     void libraryChanged();
-    void tmdbApiKeyChanged();
+    void webDavSettingsChanged();
+    void imageCacheChanged();
 
 private:
     void setPlaybackState(PlaybackState state);
@@ -127,17 +132,17 @@ private:
     void handlePositionChanged(qint64 positionMs);
     void handlePlaybackFinished();
     void saveProgress(bool resetAtEnd = false);
-    void fetchNextTmdbMatch();
     void appendPlaylistEntry(const QUrl &source, const QString &title);
     [[nodiscard]] static QVariantList tracksByType(const MediaInfo &media, TrackType type);
 
     QuarkTV::Mpv::MpvSession *session_ = nullptr;
     Library::MediaLibrary library_;
-    QNetworkAccessManager *network_ = nullptr;
-    QQueue<QPair<QUrl, QString>> tmdbQueue_;
-    QSet<QString> tmdbQueuedSources_;
-    QString tmdbApiKey_;
-    bool tmdbRequestActive_ = false;
+    QNetworkAccessManager *imageNetwork_ = nullptr;
+    QSet<QString> pendingImageDownloads_;
+    int imageCacheRevision_ = 0;
+    QString webDavUrl_;
+    QString webDavUsername_;
+    QString webDavPassword_;
     QTimer progressTimer_;
     MediaInfo mediaInfo_;
     PlaybackState playbackState_ = PlaybackState::Stopped;

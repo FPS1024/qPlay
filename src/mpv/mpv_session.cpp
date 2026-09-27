@@ -134,13 +134,16 @@ MpvSession::~MpvSession()
     shutdown();
 }
 
-void MpvSession::openUrl(const QUrl &url, bool autoplay)
+void MpvSession::openUrl(const QUrl &url, bool autoplay,
+                         const QString &httpUsername, const QString &httpPassword)
 {
     if (!handle_) {
         emit errorOccurred(tr("libmpv is not initialized."));
         return;
     }
     currentUrl_ = url;
+    currentHttpUsername_ = httpUsername;
+    currentHttpPassword_ = httpPassword;
     hasPendingOpen_ = true;
     Q_UNUSED(autoplay)
     // The libmpv VO cannot open a video until the Qt OpenGL render context
@@ -159,6 +162,21 @@ void MpvSession::setRenderContextReady()
 void MpvSession::loadCurrentUrl()
 {
     if (!handle_ || !hasPendingOpen_) return;
+    // Set the HTTP header immediately before loadfile. This API path works on
+    // older system libmpv versions that do not support loadfile per-file
+    // options. Clearing it for other sources prevents credential reuse.
+    const QString fields = currentHttpUsername_.isEmpty()
+        ? QString()
+        : QStringLiteral("Authorization: Basic ")
+              + QString::fromLatin1((currentHttpUsername_ + QLatin1Char(':')
+                                      + currentHttpPassword_).toUtf8().toBase64());
+    const QByteArray headers = fields.toUtf8();
+    const int headerResult = mpv_set_property_string(handle_, "http-header-fields", headers.constData());
+    if (headerResult < 0)
+        emit warningOccurred(tr("Could not configure WebDAV authorization headers: %1")
+                                 .arg(errorText(headerResult)));
+
+    qInfo() << "WebDAV authentication attached to current playback:" << !currentHttpUsername_.isEmpty();
     const QByteArray encoded = (currentUrl_.isLocalFile()
                                     ? QUrl::fromLocalFile(currentUrl_.toLocalFile()).toEncoded(QUrl::FullyEncoded)
                                     : currentUrl_.toEncoded(QUrl::FullyEncoded));

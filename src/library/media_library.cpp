@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -58,7 +59,8 @@ bool MediaLibrary::execute(const QString &sql, QString *error) const
 
 bool MediaLibrary::initialize(QString *error)
 {
-    const QString dataDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    const QString dataDirectory = QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))
+                                      .filePath(QStringLiteral("qPlay"));
     QDir directory(dataDirectory);
     if (!directory.exists() && !directory.mkpath(QStringLiteral("."))) {
         if (error) {
@@ -67,8 +69,40 @@ bool MediaLibrary::initialize(QString *error)
         return false;
     }
 
+    const QString databasePath = directory.filePath(QStringLiteral("library.sqlite3"));
+    const QString genericDataDirectory = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QStringList legacyDatabasePaths{
+        QDir(genericDataDirectory).filePath(QStringLiteral("QuarkTV/qPlay/library.sqlite3")),
+        QDir(genericDataDirectory).filePath(QStringLiteral("QuarkTV/Quark TV/library.sqlite3")),
+    };
+    if (!QFileInfo::exists(databasePath)) {
+        for (const QString &legacyDatabasePath : legacyDatabasePaths) {
+            if (!QFileInfo::exists(legacyDatabasePath)) continue;
+
+            if (!QFile::copy(legacyDatabasePath, databasePath)) {
+                if (error) {
+                    *error = tr("Unable to migrate the existing media library from %1 to %2.")
+                                 .arg(legacyDatabasePath, databasePath);
+                }
+                return false;
+            }
+
+            const QString legacyWalPath = legacyDatabasePath + QStringLiteral("-wal");
+            if (QFileInfo::exists(legacyWalPath)
+                && !QFile::copy(legacyWalPath, databasePath + QStringLiteral("-wal"))) {
+                QFile::remove(databasePath);
+                if (error) {
+                    *error = tr("Unable to migrate the pending media library changes from %1.")
+                                 .arg(legacyWalPath);
+                }
+                return false;
+            }
+            break;
+        }
+    }
+
     database_ = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName_);
-    database_.setDatabaseName(directory.filePath(QStringLiteral("library.sqlite3")));
+    database_.setDatabaseName(databasePath);
     if (!database_.open()) {
         if (error) {
             *error = database_.lastError().text();
@@ -93,8 +127,15 @@ bool MediaLibrary::initialize(QString *error)
             favorite INTEGER NOT NULL DEFAULT 0,
             tmdb_id INTEGER NOT NULL DEFAULT 0,
             poster_url TEXT NOT NULL DEFAULT '',
+            backdrop_url TEXT NOT NULL DEFAULT '',
+            rating REAL NOT NULL DEFAULT 0,
             overview TEXT NOT NULL DEFAULT '',
             release_date TEXT NOT NULL DEFAULT '',
+            media_type TEXT NOT NULL DEFAULT 'movie',
+            series_title TEXT NOT NULL DEFAULT '',
+            season_number INTEGER NOT NULL DEFAULT 0,
+            episode_number INTEGER NOT NULL DEFAULT 0,
+            episode_title TEXT NOT NULL DEFAULT '',
             last_opened_ms INTEGER NOT NULL DEFAULT 0,
             created_ms INTEGER NOT NULL DEFAULT 0
         );
@@ -113,8 +154,15 @@ bool MediaLibrary::initialize(QString *error)
     const QList<QPair<QString, QString>> migrations{
         {QStringLiteral("tmdb_id"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")},
         {QStringLiteral("poster_url"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
+        {QStringLiteral("backdrop_url"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
+        {QStringLiteral("rating"), QStringLiteral("REAL NOT NULL DEFAULT 0")},
         {QStringLiteral("overview"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
         {QStringLiteral("release_date"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
+        {QStringLiteral("media_type"), QStringLiteral("TEXT NOT NULL DEFAULT 'movie'")},
+        {QStringLiteral("series_title"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
+        {QStringLiteral("season_number"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")},
+        {QStringLiteral("episode_number"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")},
+        {QStringLiteral("episode_title"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
     };
     for (const auto &[name, type] : migrations) {
         QSqlQuery columns(database_);
@@ -150,7 +198,7 @@ bool MediaLibrary::rememberMedia(const MediaInfo &media, qint64 positionMs)
             position_ms, play_count, last_opened_ms, created_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
         ON CONFLICT(source) DO UPDATE SET
-            title = excluded.title,
+            title = CASE WHEN media.title = '' THEN excluded.title ELSE media.title END,
             format_name = excluded.format_name,
             duration_ms = excluded.duration_ms,
             bitrate = excluded.bitrate,
@@ -174,37 +222,6 @@ bool MediaLibrary::rememberMedia(const MediaInfo &media, qint64 positionMs)
     return query.exec();
 }
 
-bool MediaLibrary::indexMedia(const QUrl &source, const QString &title)
-{
-    if (!database_.isOpen() || !source.isValid()) return false;
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral(R"(
-        INSERT INTO media (source, title, created_ms)
-        VALUES (?, ?, ?)
-        ON CONFLICT(source) DO UPDATE SET
-            title = CASE WHEN media.title = '' THEN excluded.title ELSE media.title END
-    )"));
-    query.addBindValue(sourceKey(source));
-    query.addBindValue(title);
-    query.addBindValue(QDateTime::currentMSecsSinceEpoch());
-    return query.exec();
-}
-
-bool MediaLibrary::updateTmdbMetadata(const QUrl &source, int tmdbId,
-                                     const QString &posterUrl, const QString &overview,
-                                     const QString &releaseDate)
-{
-    if (!database_.isOpen() || !source.isValid()) return false;
-    QSqlQuery query(database_);
-    query.prepare(QStringLiteral("UPDATE media SET tmdb_id=?, poster_url=?, overview=?, release_date=? WHERE source=?"));
-    query.addBindValue(tmdbId);
-    query.addBindValue(posterUrl);
-    query.addBindValue(overview);
-    query.addBindValue(releaseDate);
-    query.addBindValue(sourceKey(source));
-    return query.exec() && query.numRowsAffected() > 0;
-}
-
 QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
 {
     QVariantList result;
@@ -212,7 +229,8 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(R"(
         SELECT source, title, format_name, duration_ms, position_ms, play_count,
-               favorite, last_opened_ms, width, height, poster_url, overview, release_date, tmdb_id
+               favorite, last_opened_ms, width, height, poster_url, overview, release_date, tmdb_id,
+               backdrop_url, rating, media_type, series_title, season_number, episode_number, episode_title
         FROM media
         WHERE title LIKE ? COLLATE NOCASE
         ORDER BY title COLLATE NOCASE, last_opened_ms DESC
@@ -241,6 +259,13 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             {QStringLiteral("overview"), query.value(11).toString()},
             {QStringLiteral("releaseDate"), query.value(12).toString()},
             {QStringLiteral("tmdbId"), query.value(13).toInt()},
+            {QStringLiteral("backdropUrl"), query.value(14).toString()},
+            {QStringLiteral("rating"), query.value(15).toDouble()},
+            {QStringLiteral("mediaType"), query.value(16).toString()},
+            {QStringLiteral("seriesTitle"), query.value(17).toString()},
+            {QStringLiteral("seasonNumber"), query.value(18).toInt()},
+            {QStringLiteral("episodeNumber"), query.value(19).toInt()},
+            {QStringLiteral("episodeTitle"), query.value(20).toString()},
         });
     }
     return result;

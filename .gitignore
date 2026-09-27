@@ -17,6 +17,8 @@ Testing/
 # Local credentials and runtime state
 .env
 .env.*
+user-config.ini
+qPlay.user.ini
 *.sqlite
 *.sqlite3
 *.db

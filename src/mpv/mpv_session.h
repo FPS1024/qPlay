@@ -27,7 +27,8 @@ public:
     [[nodiscard]] QString initializationError() const { return initializationError_; }
 
 public slots:
-    void openUrl(const QUrl &url, bool autoplay = true);
+    void openUrl(const QUrl &url, bool autoplay = true,
+                 const QString &httpUsername = {}, const QString &httpPassword = {});
     void setRenderContextReady();
     void play();
     void pause();
@@ -68,6 +69,8 @@ private:
     QString initializationError_;
     QTimer pollTimer_;
     QUrl currentUrl_;
+    QString currentHttpUsername_;
+    QString currentHttpPassword_;
     bool shuttingDown_ = false;
     bool renderContextReady_ = false;
     bool hasPendingOpen_ = false;

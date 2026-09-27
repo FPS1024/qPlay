@@ -1,7 +1,8 @@
 # Architecture
 
-qPlay is a native Qt desktop application. QML provides the library, poster
-grid, playback controls, and settings. `PlayerEngine` exposes the application
+qPlay is a native Qt desktop application. QML provides the browse home, title
+details, playback controls, and settings. Selecting a poster opens details;
+only the details page starts playback. `PlayerEngine` exposes the application
 model to QML and stores catalogue entries, TMDB metadata, favorites, and resume
 positions in SQLite.
 
@@ -10,14 +11,20 @@ application state. The video item embeds libmpv's OpenGL render API in a
 `QQuickFramebufferObject`; audio decoding, synchronization, seeking, and codec
 handling remain inside mpv.
 
-TMDB lookups are queued and performed one at a time. The v3 API key is stored
-in local application settings. Poster files are fetched by Qt Quick's image
-loader and cached by Qt.
+An external AI agent skill owns catalog scanning and TMDB matching. It reads
+the WebDAV root and TMDB key from `~/.config/qPlay/user-config.ini`, then
+writes metadata and WebDAV playback URLs into the shared SQLite catalog.
+qPlay does not scan directories or make TMDB requests. It reads the catalog,
+stores playback progress, and passes WebDAV credentials to libmpv only for
+media URLs below the configured WebDAV root. The shared catalog contract is in
+[`MEDIA_CATALOG.md`](MEDIA_CATALOG.md).
 
-The current source provider scans local directories. Cloud-account discovery
-and refreshable Quark playback URLs are not yet implemented, so cloud file IDs
-and expiring stream URLs are not treated as durable library paths.
+TMDB poster and background URLs are cached as files in
+`~/.local/share/qPlay/poster` and `~/.local/share/qPlay/background`. On a cache
+miss, qPlay displays the remote image while downloading it; once saved, the
+image source switches to the local file. Later launches use the cached file.
 
-The user-facing name and executable are `qPlay`. The `QuarkTV` C++ namespace,
-QML module, and Qt settings identity remain stable internal identifiers so the
-existing media catalogue and TMDB key keep using their current storage paths.
+The user-facing name, executable, Qt application name, and organization are
+`qPlay`. The `QuarkTV` C++ namespace and QML module remain internal identifiers.
+On first launch after the rename, the media database is copied from earlier
+application-data locations to `~/.local/share/qPlay`.

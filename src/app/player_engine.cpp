@@ -3,19 +3,18 @@
 #include "mpv/mpv_session.h"
 
 #include <QDebug>
-#include <QDirIterator>
-#include <QFileDialog>
-#include <QStandardPaths>
-#include <QMetaObject>
-#include <QMimeDatabase>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <QDir>
+#include <QFileInfo>
+#include <QFile>
+#include <QCryptographicHash>
+#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QMetaObject>
+#include <QSettings>
 #include <QRegularExpression>
-#include <QSet>
-#include <QUrlQuery>
 
 #include <algorithm>
 #include <cmath>
@@ -23,6 +22,31 @@
 namespace QuarkTV::App {
 
 namespace {
+
+QString userConfigPath()
+{
+    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    const QString directory = QDir(configRoot).filePath(QStringLiteral("qPlay"));
+    QDir().mkpath(directory);
+    const QString path = QDir(directory).filePath(QStringLiteral("user-config.ini"));
+    if (!QFileInfo::exists(path)) {
+        QFile file(path);
+        if (file.open(QIODevice::WriteOnly)) file.close();
+    }
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return path;
+}
+
+QSettings userConfig()
+{
+    return QSettings(userConfigPath(), QSettings::IniFormat);
+}
+
+void secureUserConfig(QSettings &settings)
+{
+    settings.sync();
+    QFile::setPermissions(settings.fileName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+}
 
 QString displayNameFor(const QUrl &source)
 {
@@ -43,9 +67,32 @@ PlayerEngine::PlayerEngine(QObject *parent)
     : QObject(parent)
     , session_(new QuarkTV::Mpv::MpvSession())
 {
-    network_ = new QNetworkAccessManager(this);
-    QSettings settings;
-    tmdbApiKey_ = settings.value(QStringLiteral("tmdb/apiKey")).toString();
+    imageNetwork_ = new QNetworkAccessManager(this);
+    QSettings settings = userConfig();
+    webDavUrl_ = settings.value(QStringLiteral("webdav/url")).toString();
+    QUrl configuredWebDavUrl(webDavUrl_);
+    if (configuredWebDavUrl.isValid() && !configuredWebDavUrl.path().endsWith(QLatin1Char('/'))) {
+        configuredWebDavUrl.setPath(configuredWebDavUrl.path() + QLatin1Char('/'));
+        webDavUrl_ = configuredWebDavUrl.toString();
+    }
+    webDavUsername_ = settings.value(QStringLiteral("webdav/username")).toString();
+    webDavPassword_ = settings.value(QStringLiteral("webdav/password")).toString();
+    if (settings.value(QStringLiteral("tmdb/apiKey")).toString().isEmpty()) {
+        const QList<QPair<QString, QString>> legacySettingsIds{
+            {QStringLiteral("qPlay"), QStringLiteral("qPlay")},
+            {QStringLiteral("QuarkTV"), QStringLiteral("qPlay")},
+            {QStringLiteral("QuarkTV"), QStringLiteral("Quark TV")},
+        };
+        for (const auto &[organization, application] : legacySettingsIds) {
+            QSettings legacySettings(organization, application);
+            const QString apiKey = legacySettings.value(QStringLiteral("tmdb/apiKey")).toString();
+            if (!apiKey.isEmpty()) {
+                settings.setValue(QStringLiteral("tmdb/apiKey"), apiKey);
+                secureUserConfig(settings);
+                break;
+            }
+        }
+    }
     if (!session_->initialized()) {
         setStatusMessage(session_->initializationError().isEmpty()
                              ? tr("libmpv could not be initialized; check the application log.")
@@ -89,7 +136,10 @@ PlayerEngine::PlayerEngine(QObject *parent)
         saveProgress();
     });
     connect(session_, &QuarkTV::Mpv::MpvSession::warningOccurred, this, [this](const QString &message) {
-        qWarning().noquote() << "libmpv:" << message;
+        QString safeMessage = message;
+        safeMessage.replace(QRegularExpression(QStringLiteral("https?://[^\\s]+")),
+                            QStringLiteral("[media URL redacted]"));
+        qWarning().noquote() << "libmpv:" << safeMessage;
     });
     connect(session_, &QuarkTV::Mpv::MpvSession::videoBackendChanged, this, [this](const QString &backend) {
         if (videoBackend_ == backend) {
@@ -224,24 +274,6 @@ QObject *PlayerEngine::renderSession() const
     return session_;
 }
 
-QString PlayerEngine::tmdbApiKey() const
-{
-    return tmdbApiKey_;
-}
-
-void PlayerEngine::setTmdbApiKey(const QString &key)
-{
-    const QString cleaned = key.trimmed();
-    if (tmdbApiKey_ == cleaned) return;
-    tmdbApiKey_ = cleaned;
-    QSettings settings;
-    settings.setValue(QStringLiteral("tmdb/apiKey"), tmdbApiKey_);
-    tmdbQueue_.clear();
-    tmdbQueuedSources_.clear();
-    emit tmdbApiKeyChanged();
-    emit libraryChanged();
-}
-
 QVariantList PlayerEngine::videoTracks() const
 {
     return videoTracks_;
@@ -282,6 +314,11 @@ int PlayerEngine::playlistIndex() const noexcept
     return playlistIndex_;
 }
 
+int PlayerEngine::imageCacheRevision() const noexcept
+{
+    return imageCacheRevision_;
+}
+
 void PlayerEngine::open(const QUrl &source)
 {
     if (!source.isValid()) {
@@ -308,6 +345,16 @@ void PlayerEngine::open(const QUrl &source)
     setPlaybackState(PlaybackState::Opening);
     appendPlaylistEntry(source, title_);
 
+    const QUrl webDavRoot(webDavUrl_);
+    QString httpUsername;
+    QString httpPassword;
+    if (source.host().compare(webDavRoot.host(), Qt::CaseInsensitive) == 0
+        && source.scheme() == webDavRoot.scheme()
+        && source.port(-1) == webDavRoot.port(-1)
+        && source.path().startsWith(webDavRoot.path())) {
+        httpUsername = webDavUsername_;
+        httpPassword = webDavPassword_;
+    }
     emit sourceChanged();
     emit titleChanged();
     emit mediaInfoChanged();
@@ -318,7 +365,9 @@ void PlayerEngine::open(const QUrl &source)
     QMetaObject::invokeMethod(session_, "openUrl",
                               Qt::QueuedConnection,
                               Q_ARG(QUrl, source),
-                              Q_ARG(bool, false));
+                              Q_ARG(bool, false),
+                              Q_ARG(QString, httpUsername),
+                              Q_ARG(QString, httpPassword));
 }
 
 void PlayerEngine::openPath(const QString &path)
@@ -482,132 +531,99 @@ QVariantList PlayerEngine::libraryMedia(const QString &filter) const
     return library_.libraryMedia(filter);
 }
 
-int PlayerEngine::scanFolder(const QUrl &folderUrl)
+QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &kind)
 {
-    if (!folderUrl.isLocalFile()) return 0;
-    QFileInfo selected(folderUrl.toLocalFile());
-    const QString folderPath = selected.isDir() ? selected.absoluteFilePath() : selected.absolutePath();
-    static const QSet<QString> extensions{
-        QStringLiteral("mkv"), QStringLiteral("mp4"), QStringLiteral("m4v"),
-        QStringLiteral("mov"), QStringLiteral("avi"), QStringLiteral("webm"),
-        QStringLiteral("ts"), QStringLiteral("m2ts"), QStringLiteral("mpg"),
-        QStringLiteral("mpeg"), QStringLiteral("wmv"), QStringLiteral("flv")
-    };
-    int added = 0;
-    QDirIterator iterator(folderPath, QDir::Files,
-                          QDirIterator::Subdirectories);
-    while (iterator.hasNext()) {
-        const QFileInfo info(iterator.next());
-        if (!extensions.contains(info.suffix().toLower())) continue;
-        const QUrl source = QUrl::fromLocalFile(info.absoluteFilePath());
-        if (library_.indexMedia(source, info.completeBaseName())) ++added;
-    }
-    if (added > 0) emit libraryChanged();
-    return added;
-}
-
-int PlayerEngine::chooseAndScanFolder()
-{
-    const QString selected = QFileDialog::getExistingDirectory(
-        nullptr, tr("Add a movie folder"), QStandardPaths::writableLocation(QStandardPaths::MoviesLocation));
-    return selected.isEmpty() ? 0 : scanFolder(QUrl::fromLocalFile(selected));
-}
-
-void PlayerEngine::enrichWithTmdb(const QUrl &source, const QString &filenameTitle)
-{
-    if (tmdbApiKey_.isEmpty() || !source.isValid()) return;
-    const QString key = source.toString(QUrl::FullyEncoded);
-    if (tmdbQueuedSources_.contains(key)) return;
-    tmdbQueuedSources_.insert(key);
-    tmdbQueue_.enqueue({source, filenameTitle});
-    fetchNextTmdbMatch();
-}
-
-void PlayerEngine::fetchNextTmdbMatch()
-{
-    if (tmdbRequestActive_ || tmdbQueue_.isEmpty() || tmdbApiKey_.isEmpty()) return;
-    const auto [source, filename] = tmdbQueue_.dequeue();
-
-    QString queryTitle = QFileInfo(filename).completeBaseName();
-    queryTitle.replace(QRegularExpression(QStringLiteral("[._]+")), QStringLiteral(" "));
-    queryTitle.remove(QRegularExpression(
-        QStringLiteral("\\b(2160p|1080p|720p|480p|4k|8k|bluray|blu[ .-]?ray|web[ .-]?dl|webrip|hdtv|x26[45]|h26[45]|hevc|avc|aac|dts|proper|remux|hdr10?)\\b"),
-        QRegularExpression::CaseInsensitiveOption));
-    queryTitle = queryTitle.simplified();
-    if (queryTitle.isEmpty()) {
-        QTimer::singleShot(250, this, &PlayerEngine::fetchNextTmdbMatch);
-        return;
+    const QString category = kind == QLatin1String("background")
+                                 ? QStringLiteral("background")
+                                 : QStringLiteral("poster");
+    const QUrl remote(remoteUrl.trimmed());
+    if (!remote.isValid() || remote.isEmpty()) return {};
+    if (remote.isLocalFile() || (remote.scheme() != QLatin1String("http")
+                                && remote.scheme() != QLatin1String("https"))) {
+        return remote;
     }
 
-    QUrl url(QStringLiteral("https://api.themoviedb.org/3/search/multi"));
-    QUrlQuery parameters;
-    parameters.addQueryItem(QStringLiteral("api_key"), tmdbApiKey_);
-    parameters.addQueryItem(QStringLiteral("query"), queryTitle);
-    parameters.addQueryItem(QStringLiteral("include_adult"), QStringLiteral("false"));
-    parameters.addQueryItem(QStringLiteral("language"), QStringLiteral("zh-CN"));
-    url.setQuery(parameters);
-    QNetworkRequest request(url);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("qPlay/0.2"));
-    tmdbRequestActive_ = true;
-    QNetworkReply *reply = network_->get(request);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, source, queryTitle] {
-        tmdbRequestActive_ = false;
-        if (reply->error() == QNetworkReply::NoError) {
-            const QJsonDocument document = QJsonDocument::fromJson(reply->readAll());
-            const QJsonArray results = document.object().value(QStringLiteral("results")).toArray();
-            auto normalize = [](QString value) {
-                value = value.toLower();
-                value.remove(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}]")));
-                return value;
-            };
-            const QString wanted = normalize(queryTitle);
-            double bestScore = 0.0;
-            QJsonObject best;
-            for (const QJsonValue &value : results) {
-                const QJsonObject candidate = value.toObject();
-                const QString mediaType = candidate.value(QStringLiteral("media_type")).toString();
-                if (mediaType != QLatin1String("movie") && mediaType != QLatin1String("tv")) continue;
-                const QString title = candidate.value(QStringLiteral("title")).toString(
-                    candidate.value(QStringLiteral("name")).toString());
-                const QString originalTitle = candidate.value(QStringLiteral("original_title")).toString(
-                    candidate.value(QStringLiteral("original_name")).toString());
-                const QString localized = normalize(title);
-                const QString original = normalize(originalTitle);
-                double score = localized == wanted || original == wanted ? 1.0 : 0.0;
-                if (score == 0.0 && !wanted.isEmpty()) {
-                    if (localized.contains(wanted) || wanted.contains(localized)
-                        || original.contains(wanted) || wanted.contains(original)) {
-                        score = 0.78;
-                    } else {
-                        QSet<QString> wantedWords;
-                        QSet<QString> candidateWords;
-                        for (const QString &word : queryTitle.toLower().split(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}]+")), Qt::SkipEmptyParts))
-                            wantedWords.insert(word);
-                        const QString candidateTitle = originalTitle;
-                        for (const QString &word : candidateTitle.toLower().split(QRegularExpression(QStringLiteral("[^\\p{L}\\p{N}]+")), Qt::SkipEmptyParts))
-                            candidateWords.insert(word);
-                        int overlap = 0;
-                        for (const QString &word : wantedWords) overlap += candidateWords.contains(word);
-                        if (!wantedWords.isEmpty()) score = double(overlap) / wantedWords.size();
-                    }
-                }
-                if (score > bestScore) { bestScore = score; best = candidate; }
-            }
-            if (bestScore >= 0.55) {
-                const int id = best.value(QStringLiteral("id")).toInt();
-                const QString posterPath = best.value(QStringLiteral("poster_path")).toString();
-                const QString posterUrl = posterPath.isEmpty()
-                    ? QString()
-                    : QStringLiteral("https://image.tmdb.org/t/p/w342") + posterPath;
-                const QString releaseDate = best.value(QStringLiteral("release_date")).toString();
-                const QString overview = best.value(QStringLiteral("overview")).toString();
-                if (library_.updateTmdbMetadata(source, id, posterUrl, overview, releaseDate))
+    const QString dataRoot = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString directory = QDir(dataRoot).filePath(QStringLiteral("qPlay/%1").arg(category));
+    const QString digest = QString::fromLatin1(
+        QCryptographicHash::hash(remote.toString(QUrl::FullyEncoded).toUtf8(),
+                                 QCryptographicHash::Sha256).toHex());
+    QString extension = QFileInfo(remote.path()).suffix().toLower();
+    if (extension != QLatin1String("jpg") && extension != QLatin1String("jpeg")
+        && extension != QLatin1String("png") && extension != QLatin1String("webp")
+        && extension != QLatin1String("avif")) {
+        extension = QStringLiteral("jpg");
+    }
+    const QString cachePath = QDir(directory).filePath(digest + QLatin1Char('.') + extension);
+    if (QFileInfo(cachePath).isFile() && QFileInfo(cachePath).size() > 0)
+        return QUrl::fromLocalFile(cachePath);
+
+    if (!pendingImageDownloads_.contains(cachePath)) {
+        if (!QDir().mkpath(directory)) return remote;
+        pendingImageDownloads_.insert(cachePath);
+        QNetworkRequest request(remote);
+        request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("qPlay/0.1.1"));
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
+                             QNetworkRequest::NoLessSafeRedirectPolicy);
+        QNetworkReply *reply = imageNetwork_->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, cachePath] {
+            pendingImageDownloads_.remove(cachePath);
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QByteArray mime = reply->header(QNetworkRequest::ContentTypeHeader).toByteArray().toLower();
+            const qint64 announcedSize = reply->header(QNetworkRequest::ContentLengthHeader).toLongLong();
+            const QByteArray data = reply->readAll();
+            if (reply->error() == QNetworkReply::NoError && status >= 200 && status < 300
+                && (mime.isEmpty() || mime.startsWith("image/"))
+                && (announcedSize <= 0 || announcedSize <= 32 * 1024 * 1024)
+                && !data.isEmpty() && data.size() <= 32 * 1024 * 1024) {
+                QSaveFile file(cachePath);
+                if (file.open(QIODevice::WriteOnly) && file.write(data) == data.size() && file.commit()) {
+                    ++imageCacheRevision_;
+                    emit imageCacheChanged();
                     emit libraryChanged();
+                }
             }
-        }
-        reply->deleteLater();
-        QTimer::singleShot(300, this, &PlayerEngine::fetchNextTmdbMatch);
-    });
+            reply->deleteLater();
+        });
+    }
+    return remote;
+}
+
+QString PlayerEngine::webDavUrl() const { return webDavUrl_; }
+void PlayerEngine::setWebDavUrl(const QString &url)
+{
+    QUrl parsed(url.trimmed());
+    if (parsed.isValid() && !parsed.path().isEmpty() && !parsed.path().endsWith(QLatin1Char('/')))
+        parsed.setPath(parsed.path() + QLatin1Char('/'));
+    const QString normalized = parsed.isValid() ? parsed.toString() : url.trimmed();
+    if (webDavUrl_ == normalized) return;
+    webDavUrl_ = normalized;
+    QSettings settings = userConfig();
+    settings.setValue(QStringLiteral("webdav/url"), webDavUrl_);
+    secureUserConfig(settings);
+    emit webDavSettingsChanged();
+}
+
+QString PlayerEngine::webDavUsername() const { return webDavUsername_; }
+void PlayerEngine::setWebDavUsername(const QString &username)
+{
+    if (webDavUsername_ == username) return;
+    webDavUsername_ = username;
+    QSettings settings = userConfig();
+    settings.setValue(QStringLiteral("webdav/username"), webDavUsername_);
+    secureUserConfig(settings);
+    emit webDavSettingsChanged();
+}
+
+QString PlayerEngine::webDavPassword() const { return webDavPassword_; }
+void PlayerEngine::setWebDavPassword(const QString &password)
+{
+    if (webDavPassword_ == password) return;
+    webDavPassword_ = password;
+    QSettings settings = userConfig();
+    settings.setValue(QStringLiteral("webdav/password"), webDavPassword_);
+    secureUserConfig(settings);
+    emit webDavSettingsChanged();
 }
 
 bool PlayerEngine::setFavorite(const QUrl &source, bool favorite)

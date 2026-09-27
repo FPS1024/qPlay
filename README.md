@@ -5,10 +5,11 @@ Qt Quick/QML, the local catalogue and watch progress are stored in SQLite, and
 playback is handled by embedded libmpv through its OpenGL render API. It does
 not use a browser or HTML video element.
 
-The home screen scans local movie folders into a poster wall. TMDB movie and
-series metadata can be matched with a locally stored v3 API key. Selecting a
-title opens the in-app player, which supports mpv seeking, audio/subtitle track
-selection, playback speed, volume, and resume position.
+The home screen presents a cinematic feature area and poster rows. Selecting a
+poster opens a title details page; playback starts only from that page. TMDB
+metadata can be matched with a locally stored v3 API key. The in-app player
+supports mpv seeking, audio/subtitle selection, playback speed, volume, and
+resume position.
 
 ## Dependencies
 
@@ -17,7 +18,7 @@ Ubuntu packages:
 ```bash
 sudo apt install build-essential cmake ninja-build pkg-config \
   qt6-base-dev qt6-declarative-dev qml6-module-qtquick \
-  qml6-module-qtquick-controls qml6-module-qtquick-dialogs \
+  qml6-module-qtquick-controls \
   qml6-module-qtquick-layouts libqt6sql6-sqlite libmpv-dev
 ```
 
@@ -29,10 +30,24 @@ cmake --build build
 ./build/bin/qPlay
 ```
 
-Use **Add folder** to scan a local movie directory. Add a TMDB v3 API key in
-Settings to fetch posters and descriptions. The key is saved in the app's local
-settings and is not written into the source tree.
+The library catalog is prepared by a separate AI agent skill. It reads the
+configured WebDAV root, matches movies and episodes with TMDB, and writes
+metadata and playback URLs to SQLite. qPlay only displays that catalog and
+plays the saved WebDAV URLs. Enter the WebDAV root and login in Settings and
+choose **Save WebDAV settings**; credentials are sent to libmpv only for URLs
+under that WebDAV root.
 
-The Quark Drive account and direct cloud playback source are not yet connected
-to this app; the current catalogue scans local folders and accepts playable
-URLs through the native file-open flow.
+The TMDB key and WebDAV settings are stored in
+`~/.config/qPlay/user-config.ini` with owner-only file permissions. This file
+is outside the repository and is also excluded by `.gitignore` if copied into
+the project. It has `[tmdb] apiKey=...` and `apiToken=...` plus `[webdav] url=...,
+username=..., password=...` entries. Settings edits the WebDAV entries; the
+separate scraper skill reads the TMDB credentials. The catalog schema is documented in
+[`docs/MEDIA_CATALOG.md`](docs/MEDIA_CATALOG.md).
+
+On Linux, playback history and the catalogue are stored in
+`~/.local/share/qPlay/library.sqlite3`. Existing data from earlier application
+directories is copied there on first launch; the original database is kept.
+TMDB poster and background images are downloaded on first display and cached
+under `~/.local/share/qPlay/poster` and `~/.local/share/qPlay/background`.
+Later launches use those local files instead of fetching the same images again.

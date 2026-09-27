@@ -8,16 +8,22 @@ Item {
     property var engine: null
     property var entries: []
     property string filterText: ""
-    signal playRequested(url source)
+    property var continueEntries: []
+    property var featured: entries.length > 0 ? entries[0] : null
+    property int imageCacheRevision: engine ? engine.imageCacheRevision : 0
+
+    function imageSource(url, kind) {
+        const revision = imageCacheRevision
+        return engine && url ? engine.cachedImageSource(url, kind) : ""
+    }
+
+    signal detailsRequested(var media)
+
+    onFilterTextChanged: reload()
 
     function reload() {
         entries = engine ? engine.libraryMedia(filterText) : []
-        if (engine) {
-            for (let i = 0; i < entries.length; ++i) {
-                if (!entries[i].posterUrl)
-                    engine.enrichWithTmdb(entries[i].source, entries[i].title)
-            }
-        }
+        continueEntries = entries.filter(function(item) { return item.positionMs > 0 })
     }
 
     Component.onCompleted: reload()
@@ -29,194 +35,298 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#080b0d"
+        color: "#080808"
     }
 
-    ColumnLayout {
+    ScrollView {
+        id: pageScroll
         anchors.fill: parent
-        anchors.leftMargin: 34
-        anchors.rightMargin: 34
-        anchors.topMargin: 28
-        anchors.bottomMargin: 26
-        spacing: 20
+        clip: true
+        contentWidth: availableWidth
+        ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 16
+        Column {
+            id: content
+            width: pageScroll.availableWidth
+            spacing: 0
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 4
-                Text {
-                    text: "YOUR LIBRARY"
-                    color: "#f2f6f5"
-                    font.pixelSize: 25
-                    font.weight: Font.DemiBold
+            Item {
+                width: content.width
+                height: Math.min(520, Math.max(390, width * 0.39))
+                clip: true
+
+                Image {
+                    anchors.fill: parent
+                    source: root.featured
+                            ? root.imageSource(root.featured.backdropUrl || root.featured.posterUrl,
+                                               root.featured.backdropUrl ? "background" : "poster")
+                            : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    opacity: 0.56
                 }
-                Text {
-                    text: root.entries.length + " titles"
-                    color: "#819193"
-                    font.pixelSize: 12
-                }
-            }
 
-            TextField {
-                Layout.preferredWidth: 260
-                placeholderText: "Search your library"
-                color: "#e7efed"
-                placeholderTextColor: "#718184"
-                selectByMouse: true
-                onTextChanged: {
-                    root.filterText = text
-                    root.reload()
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0.0; color: "#080808" }
+                        GradientStop { position: 0.42; color: "#99080808" }
+                        GradientStop { position: 1.0; color: "#88080808" }
+                    }
                 }
-                background: Rectangle {
-                    radius: 7
-                    color: "#11181b"
-                    border.color: parent.activeFocus ? "#3dd6b5" : "#263236"
+
+                Rectangle {
+                    anchors.fill: parent
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "transparent" }
+                        GradientStop { position: 0.68; color: "#080808" }
+                        GradientStop { position: 1.0; color: "#080808" }
+                    }
                 }
-            }
 
-            Button {
-                text: "Scan a folder"
-                onClicked: root.engine.chooseAndScanFolder()
-                contentItem: Text {
-                    text: parent.text
-                    color: "#06110e"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                background: Rectangle {
-                    radius: 6
-                    color: parent.down ? "#2eb59a" : parent.hovered ? "#4be3c1" : "#3dd6b5"
-                }
-            }
-        }
-
-        GridView {
-            id: grid
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            clip: true
-            cellWidth: 174
-            cellHeight: 274
-            model: root.entries
-            visible: root.entries.length > 0
-
-            delegate: Item {
-                required property var modelData
-                width: grid.cellWidth
-                height: grid.cellHeight
-
-                Column {
+                ColumnLayout {
                     anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.right: parent.right
-                    anchors.leftMargin: 9
-                    anchors.rightMargin: 9
-                    spacing: 9
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: Math.max(36, content.width * 0.055)
+                    anchors.rightMargin: 40
+                    anchors.bottomMargin: 52
+                    width: Math.min(620, content.width * 0.60)
+                    spacing: 14
 
-                    Rectangle {
-                        width: parent.width
-                        height: width * 1.48
-                        radius: 8
-                        clip: true
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: "#1d413e" }
-                            GradientStop { position: 0.52; color: "#172a30" }
-                            GradientStop { position: 1.0; color: "#11181d" }
-                        }
+                    Text {
+                        text: "影片精选"
+                        color: "#e50914"
+                        font.pixelSize: 13
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1.5
+                        visible: root.featured !== null
+                    }
 
-                        Text {
-                            anchors.centerIn: parent
-                            width: parent.width - 24
-                            text: modelData.title.length > 0 ? modelData.title : "?"
-                            color: "#d7e7e2"
-                            opacity: 0.88
-                            font.pixelSize: 22
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.featured
+                              ? (root.featured.seriesTitle || root.featured.title)
+                              : "精彩影片，即刻开启"
+                        color: "#ffffff"
+                        font.pixelSize: Math.min(52, Math.max(34, content.width * 0.043))
+                        font.weight: Font.Black
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        Layout.fillWidth: true
+                        visible: root.featured !== null
+                        text: root.featured
+                              ? (root.featured.overview.length > 0
+                                 ? root.featured.overview
+                                 : root.featured.releaseDate)
+                              : "在下方浏览影片，打开详情后即可播放。"
+                        color: "#e5e5e5"
+                        font.pixelSize: 15
+                        lineHeight: 1.35
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                    }
+
+                    Button {
+                        id: featuredDetailsButton
+                        visible: root.featured !== null
+                        text: "ⓘ  影片详情"
+                        onClicked: root.detailsRequested(root.featured)
+                        contentItem: Text {
+                            text: featuredDetailsButton.text
+                            color: "#111"
+                            font.pixelSize: 14
                             font.weight: Font.DemiBold
                             horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 4
-                            elide: Text.ElideRight
-                            visible: !modelData.posterUrl
+                            verticalAlignment: Text.AlignVCenter
                         }
-
-                        Image {
-                            anchors.fill: parent
-                            source: modelData.posterUrl
-                            visible: status === Image.Ready
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            cache: true
+                        background: Rectangle {
+                            implicitWidth: 148
+                            implicitHeight: 42
+                            radius: 4
+                            color: featuredDetailsButton.down ? "#d6d6d6" : featuredDetailsButton.hovered ? "#ffffff" : "#eeeeee"
                         }
-
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.bottom: parent.bottom
-                            height: 3
-                            visible: modelData.positionMs > 0 && modelData.durationMs > 0
-                            color: "#263538"
-                            Rectangle {
-                                width: parent.width * Math.min(1, modelData.positionMs / modelData.durationMs)
-                                height: parent.height
-                                color: "#3dd6b5"
-                            }
-                        }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: parent.radius
-                            color: cardMouse.containsMouse ? "#18000000" : "transparent"
-                            border.width: cardMouse.containsMouse ? 1 : 0
-                            border.color: "#57dfc0"
-                        }
-
-                        MouseArea {
-                            id: cardMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.playRequested(modelData.source)
-                        }
-                    }
-
-                    Text {
-                        width: parent.width
-                        text: modelData.title
-                        color: "#dce7e4"
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
-                    Text {
-                        width: parent.width
-                        text: modelData.durationMs > 0
-                              ? root.engine.formatTime(modelData.durationMs)
-                              : modelData.formatName
-                        color: "#748589"
-                        font.pixelSize: 10
-                        elide: Text.ElideRight
                     }
                 }
             }
 
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            Item {
+                width: content.width
+                height: sectionStack.implicitHeight + 64
+
+                Column {
+                    id: sectionStack
+                    anchors.fill: parent
+                    anchors.leftMargin: Math.max(28, content.width * 0.045)
+                    anchors.rightMargin: Math.max(28, content.width * 0.045)
+                    anchors.topMargin: 4
+                    anchors.bottomMargin: 48
+                    spacing: 32
+
+                    Column {
+                        width: parent.width
+                        spacing: 14
+                        visible: root.continueEntries.length > 0
+
+                        Text {
+                            text: "继续观看"
+                            color: "#f5f5f1"
+                            font.pixelSize: 21
+                            font.weight: Font.DemiBold
+                        }
+
+                        ListView {
+                            width: parent.width
+                            height: 276
+                            orientation: ListView.Horizontal
+                            spacing: 14
+                            clip: true
+                            model: root.continueEntries
+                            delegate: posterCard
+                            boundsBehavior: Flickable.StopAtBounds
+                        }
+                    }
+
+                    Column {
+                        width: parent.width
+                        spacing: 14
+                        visible: root.entries.length > 0
+
+                        Text {
+                            text: root.filterText.length > 0 ? "搜索结果" : "为你推荐"
+                            color: "#f5f5f1"
+                            font.pixelSize: 21
+                            font.weight: Font.DemiBold
+                        }
+
+                        GridView {
+                            id: allTitles
+                            width: parent.width
+                            height: Math.max(280, contentHeight)
+                            cellWidth: Math.max(154, Math.min(198, Math.floor(width / Math.max(2, Math.floor(width / 180)))))
+                            cellHeight: 286
+                            interactive: false
+                            model: root.entries
+                            delegate: posterCard
+                        }
+                    }
+
+                    Item {
+                        width: parent.width
+                        height: 180
+                        visible: root.entries.length === 0
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.filterText.length > 0 ? "没有找到相关影片" : "影片内容将在这里呈现"
+                            color: "#929292"
+                            font.pixelSize: 16
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    Component {
+        id: posterCard
 
         Item {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            visible: root.entries.length === 0
-            Text {
-                anchors.centerIn: parent
-                width: Math.min(420, parent.width)
-                text: "Add a folder containing your movies to build your library."
-                color: "#748589"
-                font.pixelSize: 14
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
+            required property var modelData
+            width: allTitles.cellWidth - 12
+            height: 276
+
+            Column {
+                anchors.fill: parent
+                spacing: 8
+
+                Rectangle {
+                    id: posterFrame
+                    width: parent.width
+                    height: parent.width * 1.43
+                    radius: 4
+                    color: "#202020"
+                    clip: true
+
+                    Text {
+                        anchors.centerIn: parent
+                        width: parent.width - 24
+                        text: modelData.title || "qPlay"
+                        color: "#dddddd"
+                        font.pixelSize: 19
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 4
+                        elide: Text.ElideRight
+                        visible: posterImage.status !== Image.Ready
+                    }
+
+                    Image {
+                        id: posterImage
+                        anchors.fill: parent
+                        source: root.imageSource(modelData.posterUrl || "", "poster")
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        cache: true
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
+                        height: 3
+                        visible: modelData.positionMs > 0 && modelData.durationMs > 0
+                        color: "#555"
+                        Rectangle {
+                            width: parent.width * Math.min(1, modelData.positionMs / modelData.durationMs)
+                            height: parent.height
+                            color: "#e50914"
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: cardMouse.containsMouse ? "#26000000" : "transparent"
+                        border.width: cardMouse.containsMouse ? 2 : 0
+                        border.color: "#eeeeee"
+                    }
+
+                    MouseArea {
+                        id: cardMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: root.detailsRequested(modelData)
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: modelData.seriesTitle || modelData.title
+                    color: "#e5e5e5"
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    width: parent.width
+                    text: modelData.mediaType === "episode"
+                          ? "S" + (modelData.seasonNumber < 10 ? "0" : "") + modelData.seasonNumber
+                            + "E" + (modelData.episodeNumber < 10 ? "0" : "") + modelData.episodeNumber
+                            + (modelData.episodeTitle ? "  ·  " + modelData.episodeTitle : "")
+                          : (modelData.rating > 0
+                             ? "★ " + Number(modelData.rating).toFixed(1)
+                               + (modelData.releaseDate ? "  ·  " + modelData.releaseDate.substring(0, 4) : "")
+                             : (modelData.releaseDate || modelData.formatName || "影片"))
+                    color: "#929292"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
             }
         }
     }

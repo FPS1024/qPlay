@@ -10,13 +10,55 @@ Dialog {
     modal: true
     focus: true
     width: Math.min(520, Overlay.overlay ? Overlay.overlay.width - 40 : 520)
-    height: 480
+    height: 650
     anchors.centerIn: Overlay.overlay
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     title: "Playback settings"
 
     contentItem: ColumnLayout {
         spacing: 16
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 7
+            Text {
+                text: "WEBDAV MEDIA LIBRARY"
+                color: "#708487"
+                font.pixelSize: 10
+                font.letterSpacing: 1
+            }
+            TextField {
+                id: webDavUrlField
+                Layout.fillWidth: true
+                placeholderText: "WebDAV collection URL"
+                text: root.engine ? root.engine.webDavUrl : ""
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                TextField {
+                    id: webDavUserField
+                    Layout.fillWidth: true
+                    placeholderText: "Username"
+                    text: root.engine ? root.engine.webDavUsername : ""
+                }
+                TextField {
+                    id: webDavPasswordField
+                    Layout.fillWidth: true
+                    placeholderText: "Password"
+                    echoMode: TextInput.Password
+                    text: root.engine ? root.engine.webDavPassword : ""
+                }
+            }
+            Button {
+                text: "Save WebDAV settings"
+                onClicked: {
+                    if (!root.engine) return
+                    root.engine.webDavUrl = webDavUrlField.text
+                    root.engine.webDavUsername = webDavUserField.text
+                    root.engine.webDavPassword = webDavPasswordField.text
+                }
+            }
+        }
 
         ColumnLayout {
             Layout.fillWidth: true
@@ -94,37 +136,6 @@ Dialog {
             onToggled: root.engine.muted = checked
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            spacing: 7
-            Text {
-                text: "TMDB API KEY"
-                color: "#708487"
-                font.pixelSize: 10
-                font.letterSpacing: 1
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                TextField {
-                    id: tmdbKeyField
-                    Layout.fillWidth: true
-                    placeholderText: "TMDB v3 API key"
-                    echoMode: TextInput.Password
-                    text: root.engine ? root.engine.tmdbApiKey : ""
-                    onAccepted: if (root.engine) root.engine.tmdbApiKey = text
-                }
-                Button {
-                    text: "Save"
-                    onClicked: if (root.engine) root.engine.tmdbApiKey = tmdbKeyField.text
-                }
-            }
-            Text {
-                text: "Saved in this app's local settings."
-                color: "#718184"
-                font.pixelSize: 10
-            }
-        }
-
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 72
@@ -171,7 +182,7 @@ Dialog {
 
                 contentItem: Text {
                     text: parent.text
-                    color: "#07110f"
+                    color: "#111111"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                     horizontalAlignment: Text.AlignHCenter
@@ -182,7 +193,7 @@ Dialog {
                     implicitWidth: 88
                     implicitHeight: 34
                     radius: 6
-                    color: parent.down ? "#32bea1" : parent.hovered ? "#4be3c1" : "#3dd6b5"
+                    color: parent.down ? "#bd0710" : parent.hovered ? "#f6121d" : "#e50914"
                 }
             }
         }

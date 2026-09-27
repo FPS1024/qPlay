@@ -21,9 +21,6 @@ public:
     bool initialize(QString *error = nullptr);
 
     bool rememberMedia(const MediaInfo &media, qint64 positionMs = 0);
-    bool indexMedia(const QUrl &source, const QString &title);
-    bool updateTmdbMetadata(const QUrl &source, int tmdbId, const QString &posterUrl,
-                            const QString &overview, const QString &releaseDate);
     bool updateProgress(const QUrl &source, qint64 positionMs, qint64 durationMs);
     bool setFavorite(const QUrl &source, bool favorite);
     bool removeMedia(const QUrl &source);
