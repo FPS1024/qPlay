@@ -119,7 +119,7 @@ Item {
         id: detailsScroll
         anchors.fill: parent
         contentWidth: width
-        contentHeight: pageContent.implicitHeight + 44
+        contentHeight: pageContent.height + 44
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -127,6 +127,7 @@ Item {
         ColumnLayout {
             id: pageContent
             width: detailsScroll.width
+            height: implicitHeight
             spacing: 30
 
             RowLayout {
