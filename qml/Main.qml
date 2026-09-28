@@ -44,7 +44,14 @@ ApplicationWindow {
     }
 
     function toggleFullscreen() {
-        visibility = visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen
+        if (visibility === Window.FullScreen) {
+            visibility = Window.Windowed
+            controlsVisible = true
+        } else {
+            visibility = Window.FullScreen
+            if (page === 2)
+                controlsVisible = false
+        }
     }
 
     Connections {
@@ -77,6 +84,26 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "Up"
+        context: Qt.ApplicationShortcut
+        enabled: window.page === 2
+        onActivated: {
+            player.muted = false
+            player.volume = Math.min(2.0, player.volume + 0.05)
+        }
+    }
+
+    Shortcut {
+        sequence: "Down"
+        context: Qt.ApplicationShortcut
+        enabled: window.page === 2
+        onActivated: {
+            player.muted = false
+            player.volume = Math.max(0.0, player.volume - 0.05)
+        }
+    }
+
+    Shortcut {
         sequence: "M"
         context: Qt.ApplicationShortcut
         enabled: window.page === 2
@@ -93,10 +120,10 @@ ApplicationWindow {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
         onActivated: {
-            if (window.page > 0)
+            if (window.visibility === Window.FullScreen)
+                window.toggleFullscreen()
+            else if (window.page > 0)
                 window.goBack()
-            else if (window.visibility === Window.FullScreen)
-                window.visibility = Window.Windowed
         }
     }
 
@@ -110,6 +137,7 @@ ApplicationWindow {
         spacing: 0
 
         Rectangle {
+            visible: !(window.page === 2 && window.visibility === Window.FullScreen)
             Layout.fillWidth: true
             Layout.preferredHeight: 68
             color: "#0b0b0b"
@@ -317,15 +345,9 @@ ApplicationWindow {
                     anchors.bottom: parent.bottom
                     visible: window.controlsVisible
                     engine: player
-                    onTracksRequested: trackMenu.open()
                 }
             }
         }
-    }
-
-    TrackMenu {
-        id: trackMenu
-        engine: player
     }
 
     SettingsDialog {

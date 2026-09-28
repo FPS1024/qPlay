@@ -212,7 +212,7 @@ double PlayerEngine::volume() const noexcept
 
 void PlayerEngine::setVolume(double volume)
 {
-    const double bounded = std::clamp(volume, 0.0, 1.0);
+    const double bounded = std::clamp(volume, 0.0, 2.0);
     if (std::abs(volume_ - bounded) < 0.0001) {
         return;
     }

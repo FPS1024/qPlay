@@ -102,6 +102,7 @@ MpvSession::MpvSession(QObject *parent, const QMap<QString, QString> &overrides)
     option("hwdec", "no");
     option("sub-auto", "fuzzy");
     option("audio-file-auto", "fuzzy");
+    option("volume-max", "200");
     option("force-window", "no");
     option("pause", "yes");
     for (auto it = overrides.cbegin(); it != overrides.cend(); ++it)
@@ -219,7 +220,7 @@ void MpvSession::seek(qint64 positionMs)
 
 void MpvSession::setVolume(double volume)
 {
-    double value = std::clamp(volume * 100.0, 0.0, 100.0);
+    double value = std::clamp(volume * 100.0, 0.0, 200.0);
     setProperty("volume", MPV_FORMAT_DOUBLE, &value);
 }
 
