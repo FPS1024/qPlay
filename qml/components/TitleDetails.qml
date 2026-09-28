@@ -195,6 +195,62 @@ Item {
                         onActivated: function(index) {
                             root.selectSeason(root.media.seasons[index])
                         }
+
+                        contentItem: Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 36
+                            text: seasonPicker.displayText
+                            color: "#f5f5f1"
+                            font.pixelSize: 14
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        indicator: Text {
+                            x: seasonPicker.width - width - 12
+                            y: (seasonPicker.height - height) / 2
+                            text: "⌄"
+                            color: "#d4d4d4"
+                            font.pixelSize: 20
+                        }
+                        background: Rectangle {
+                            radius: 4
+                            color: seasonPicker.pressed ? "#292929" : "#191919"
+                            border.width: 1
+                            border.color: seasonPicker.activeFocus ? "#e50914" : "#4a4a4a"
+                        }
+                        delegate: ItemDelegate {
+                            width: seasonPicker.width
+                            height: 42
+                            highlighted: seasonPicker.highlightedIndex === index
+                            contentItem: Text {
+                                text: seasonPicker.textAt(index)
+                                color: "#f5f5f1"
+                                font.pixelSize: 14
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted ? "#3a3a3a" : "#1d1d1d"
+                            }
+                        }
+                        popup: Popup {
+                            y: seasonPicker.height - 1
+                            width: seasonPicker.width
+                            implicitHeight: Math.min(contentItem.implicitHeight, 320)
+                            padding: 1
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: seasonPicker.popup.visible ? seasonPicker.delegateModel : null
+                                currentIndex: seasonPicker.highlightedIndex
+                            }
+                            background: Rectangle {
+                                radius: 4
+                                color: "#191919"
+                                border.color: "#4a4a4a"
+                            }
+                        }
                     }
                 }
 
@@ -397,6 +453,63 @@ Item {
                         currentIndex: root.episodePageIndex
                         enabled: model.length > 0
                         onActivated: function(index) { root.episodePageIndex = index }
+
+                        contentItem: Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 36
+                            text: episodeRangePicker.displayText
+                            color: "#f5f5f1"
+                            font.pixelSize: 13
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                        indicator: Text {
+                            x: episodeRangePicker.width - width - 12
+                            y: (episodeRangePicker.height - height) / 2
+                            text: "⌄"
+                            color: "#d4d4d4"
+                            font.pixelSize: 20
+                        }
+                        background: Rectangle {
+                            radius: 4
+                            color: episodeRangePicker.pressed ? "#292929" : "#191919"
+                            border.width: 1
+                            border.color: episodeRangePicker.activeFocus ? "#e50914" : "#4a4a4a"
+                        }
+                        delegate: ItemDelegate {
+                            width: episodeRangePicker.width
+                            height: 42
+                            highlighted: episodeRangePicker.highlightedIndex === index
+                            contentItem: Text {
+                                text: episodeRangePicker.textAt(index)
+                                color: "#f5f5f1"
+                                font.pixelSize: 13
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideRight
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted ? "#3a3a3a" : "#1d1d1d"
+                            }
+                        }
+                        popup: Popup {
+                            y: episodeRangePicker.height - 1
+                            width: episodeRangePicker.width
+                            implicitHeight: Math.min(contentItem.implicitHeight, 320)
+                            padding: 1
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: episodeRangePicker.popup.visible
+                                       ? episodeRangePicker.delegateModel : null
+                                currentIndex: episodeRangePicker.highlightedIndex
+                            }
+                            background: Rectangle {
+                                radius: 4
+                                color: "#191919"
+                                border.color: "#4a4a4a"
+                            }
+                        }
                     }
 
                     ToolButton {
