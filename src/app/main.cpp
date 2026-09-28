@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
     QApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     application.setApplicationName(QStringLiteral("qPlay"));
-    application.setApplicationVersion(QStringLiteral("0.1.1"));
+    application.setApplicationVersion(QStringLiteral("1.0.0"));
     application.setOrganizationName(QStringLiteral("qPlay"));
     application.setOrganizationDomain(QStringLiteral("qplay.local"));
 

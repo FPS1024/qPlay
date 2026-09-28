@@ -562,7 +562,7 @@ QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &ki
         if (!QDir().mkpath(directory)) return remote;
         pendingImageDownloads_.insert(cachePath);
         QNetworkRequest request(remote);
-        request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("qPlay/0.1.1"));
+        request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("qPlay/1.0.0"));
         request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                              QNetworkRequest::NoLessSafeRedirectPolicy);
         QNetworkReply *reply = imageNetwork_->get(request);
