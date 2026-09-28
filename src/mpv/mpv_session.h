@@ -51,6 +51,7 @@ signals:
     void errorOccurred(const QString &message);
     void warningOccurred(const QString &message);
     void videoBackendChanged(const QString &backend);
+    void playbackStatsChanged(const QString &videoCodec, int width, int height, qint64 bitrate);
     void audioTrackChanged(int id);
     void subtitleTrackChanged(int id);
     void tracksChanged(const QuarkTV::MediaInfo &media);
@@ -62,6 +63,7 @@ private:
     void setProperty(const char *name, mpv_format format, void *value);
     void loadCurrentUrl();
     void refreshPlaybackProperties();
+    void refreshPlaybackStats();
     void refreshTracks();
     void handleFileLoaded();
 

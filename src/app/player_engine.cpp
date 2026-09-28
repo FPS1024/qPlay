@@ -106,6 +106,17 @@ PlayerEngine::PlayerEngine(QObject *parent)
 
     connect(session_, &QuarkTV::Mpv::MpvSession::mediaOpened,
             this, &PlayerEngine::handleMediaOpened);
+    connect(session_, &QuarkTV::Mpv::MpvSession::playbackStatsChanged, this,
+            [this](const QString &codec, int width, int height, qint64 bitrate) {
+        const QString resolution = width > 0 && height > 0
+            ? QStringLiteral("%1 × %2").arg(width).arg(height) : QString();
+        if (videoCodec_ == codec && videoResolution_ == resolution && videoBitrate_ == bitrate)
+            return;
+        videoCodec_ = codec;
+        videoResolution_ = resolution;
+        videoBitrate_ = bitrate;
+        emit playbackStatsChanged();
+    });
     connect(session_, &QuarkTV::Mpv::MpvSession::positionChanged,
             this, &PlayerEngine::handlePositionChanged);
     connect(session_, &QuarkTV::Mpv::MpvSession::durationChanged, this, [this](qint64 durationMs) {
@@ -194,6 +205,10 @@ QString PlayerEngine::formatName() const
 {
     return mediaInfo_.formatName;
 }
+
+QString PlayerEngine::videoCodec() const { return videoCodec_; }
+QString PlayerEngine::videoResolution() const { return videoResolution_; }
+qint64 PlayerEngine::videoBitrate() const noexcept { return videoBitrate_; }
 
 qint64 PlayerEngine::duration() const noexcept
 {
@@ -332,6 +347,9 @@ void PlayerEngine::open(const QUrl &source)
     durationMs_ = 0;
     positionMs_ = 0;
     mediaInfo_ = {};
+    videoCodec_.clear();
+    videoResolution_.clear();
+    videoBitrate_ = 0;
     mediaInfo_.source = source;
     mediaInfo_.title = title_;
     videoTracks_.clear();
@@ -358,6 +376,7 @@ void PlayerEngine::open(const QUrl &source)
     emit sourceChanged();
     emit titleChanged();
     emit mediaInfoChanged();
+    emit playbackStatsChanged();
     emit durationChanged();
     emit positionChanged();
     emit tracksChanged();

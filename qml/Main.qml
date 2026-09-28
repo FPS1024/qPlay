@@ -55,6 +55,12 @@ ApplicationWindow {
         }
     }
 
+    function bitrateText(rate) {
+        if (rate <= 0) return "未知"
+        return rate >= 1000000 ? (rate / 1000000).toFixed(2) + " Mbps"
+                               : Math.round(rate / 1000) + " kbps"
+    }
+
     Connections {
         target: player
         function onSourceChanged() {
@@ -266,6 +272,35 @@ ApplicationWindow {
                     acceptedButtons: Qt.LeftButton
                     onClicked: window.controlsVisible = !window.controlsVisible
                     onDoubleClicked: window.toggleFullscreen()
+                }
+
+                ToolButton {
+                    id: playbackInfoButton
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.topMargin: 16
+                    anchors.rightMargin: 22
+                    z: 4
+                    text: "ⓘ 视频信息"
+                    hoverEnabled: true
+                    contentItem: Text {
+                        text: playbackInfoButton.text
+                        color: playbackInfoButton.hovered ? "#ffffff" : "#eeeeee"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        radius: 5
+                        color: playbackInfoButton.hovered ? "#dd242424" : "#aa111111"
+                        border.color: playbackInfoButton.hovered ? "#e50914" : "#66555555"
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 0
+                    ToolTip.text: "当前视频流\n"
+                                   + "编码：" + (player.videoCodec || "未知") + "\n"
+                                   + "分辨率：" + (player.videoResolution || "未知") + "\n"
+                                   + "视频码率：" + window.bitrateText(player.videoBitrate)
                 }
 
                 Rectangle {

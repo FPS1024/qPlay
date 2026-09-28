@@ -21,6 +21,9 @@ class PlayerEngine final : public QObject
     Q_PROPERTY(QUrl source READ source NOTIFY sourceChanged)
     Q_PROPERTY(QString title READ title NOTIFY titleChanged)
     Q_PROPERTY(QString formatName READ formatName NOTIFY mediaInfoChanged)
+    Q_PROPERTY(QString videoCodec READ videoCodec NOTIFY playbackStatsChanged)
+    Q_PROPERTY(QString videoResolution READ videoResolution NOTIFY playbackStatsChanged)
+    Q_PROPERTY(qint64 videoBitrate READ videoBitrate NOTIFY playbackStatsChanged)
     Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(qint64 position READ position NOTIFY positionChanged)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
@@ -51,6 +54,9 @@ public:
     [[nodiscard]] QUrl source() const;
     [[nodiscard]] QString title() const;
     [[nodiscard]] QString formatName() const;
+    [[nodiscard]] QString videoCodec() const;
+    [[nodiscard]] QString videoResolution() const;
+    [[nodiscard]] qint64 videoBitrate() const noexcept;
     [[nodiscard]] qint64 duration() const noexcept;
     [[nodiscard]] qint64 position() const noexcept;
     [[nodiscard]] double volume() const noexcept;
@@ -111,6 +117,7 @@ signals:
     void sourceChanged();
     void titleChanged();
     void mediaInfoChanged();
+    void playbackStatsChanged();
     void durationChanged();
     void positionChanged();
     void volumeChanged();
@@ -148,6 +155,9 @@ private:
     PlaybackState playbackState_ = PlaybackState::Stopped;
     QUrl source_;
     QString title_;
+    QString videoCodec_;
+    QString videoResolution_;
+    qint64 videoBitrate_ = 0;
     qint64 durationMs_ = 0;
     qint64 positionMs_ = 0;
     double volume_ = 1.0;

@@ -123,6 +123,8 @@ MpvSession::MpvSession(QObject *parent, const QMap<QString, QString> &overrides)
     mpv_observe_property(handle_, 3, "pause", MPV_FORMAT_FLAG);
     mpv_observe_property(handle_, 4, "paused-for-cache", MPV_FORMAT_FLAG);
     mpv_observe_property(handle_, 5, "track-list", MPV_FORMAT_NODE);
+    mpv_observe_property(handle_, 6, "video-params", MPV_FORMAT_NODE);
+    mpv_observe_property(handle_, 8, "video-bitrate", MPV_FORMAT_INT64);
     mpv_request_log_messages(handle_, "warn");
     pollTimer_.setInterval(30);
     connect(&pollTimer_, &QTimer::timeout, this, &MpvSession::pollEvents);
@@ -322,6 +324,9 @@ void MpvSession::pollEvents()
                 if (buffering_ != state) { buffering_ = state; emit bufferingChanged(state); }
             } else if (qstrcmp(property->name, "track-list") == 0) {
                 refreshTracks();
+            } else if (qstrcmp(property->name, "video-params") == 0
+                       || qstrcmp(property->name, "video-bitrate") == 0) {
+                refreshPlaybackStats();
             }
             break;
         }
@@ -371,6 +376,32 @@ void MpvSession::handleFileLoaded()
     emit mediaOpened(media);
 }
 
+void MpvSession::refreshPlaybackStats()
+{
+    if (!handle_) return;
+
+    QString codec;
+    for (const TrackInfo &track : currentMedia_.tracks) {
+        if (track.type == TrackType::Video && track.streamIndex == currentMedia_.videoStream) {
+            codec = track.codec;
+            break;
+        }
+    }
+
+    int width = 0;
+    int height = 0;
+    mpv_node params{};
+    if (mpv_get_property(handle_, "video-params", MPV_FORMAT_NODE, &params) >= 0) {
+        width = valueInt(&params, "w", 0);
+        height = valueInt(&params, "h", 0);
+    }
+    mpv_free_node_contents(&params);
+
+    qint64 bitrate = 0;
+    mpv_get_property(handle_, "video-bitrate", MPV_FORMAT_INT64, &bitrate);
+    emit playbackStatsChanged(codec, width, height, qMax<qint64>(0, bitrate));
+}
+
 void MpvSession::refreshTracks()
 {
     if (!handle_) return;
@@ -411,6 +442,7 @@ void MpvSession::refreshTracks()
     emit tracksChanged(currentMedia_);
     emit audioTrackChanged(currentMedia_.audioStream);
     emit subtitleTrackChanged(currentMedia_.subtitleStream);
+    refreshPlaybackStats();
 }
 
 } // namespace QuarkTV::Mpv
