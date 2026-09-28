@@ -12,6 +12,7 @@ Item {
     property var selectedSeason: null
     property int episodePageIndex: 0
     property real contentSideMargin: Math.max(36, width * 0.075)
+    readonly property bool isSeries: media && media.mediaType === "series"
 
     readonly property var episodePages: buildEpisodePages()
     readonly property var visibleEpisodes: selectedSeason && selectedSeason.episodes
@@ -136,7 +137,9 @@ Item {
                 spacing: Math.max(28, root.width * 0.04)
 
                 ColumnLayout {
-                    Layout.preferredWidth: Math.min(290, (root.width - 2 * root.contentSideMargin) * 0.29)
+                    Layout.preferredWidth: Math.min(root.isSeries ? 210 : 290,
+                                                    (root.width - 2 * root.contentSideMargin)
+                                                    * (root.isSeries ? 0.24 : 0.29))
                     Layout.alignment: Qt.AlignTop
                     spacing: 12
 
