@@ -535,7 +535,9 @@ QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &ki
 {
     const QString category = kind == QLatin1String("background")
                                  ? QStringLiteral("background")
-                                 : QStringLiteral("poster");
+                                 : kind == QLatin1String("episode")
+                                       ? QStringLiteral("episode")
+                                       : QStringLiteral("poster");
     const QUrl remote(remoteUrl.trimmed());
     if (!remote.isValid() || remote.isEmpty()) return {};
     if (remote.isLocalFile() || (remote.scheme() != QLatin1String("http")

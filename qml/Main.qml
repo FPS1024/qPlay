@@ -20,15 +20,16 @@ ApplicationWindow {
     property bool controlsVisible: true
     property var selectedMedia: ({})
 
-    function playSelected() {
-        if (!selectedMedia || !selectedMedia.source)
+    function playSelected(playbackMedia) {
+        const target = playbackMedia || selectedMedia
+        if (!target || !target.source)
             return
 
-        if (player.source.toString() === selectedMedia.source.toString()) {
+        if (player.source.toString() === target.source.toString()) {
             if (player.playbackState !== PlaybackState.Playing)
                 player.play()
         } else {
-            player.open(selectedMedia.source)
+            player.open(target.source)
         }
         page = 2
         controlsVisible = true
@@ -247,7 +248,7 @@ ApplicationWindow {
                 media: window.selectedMedia
                 engine: player
                 onBackRequested: window.page = 0
-                onPlayRequested: window.playSelected()
+                onPlayRequested: function(media) { window.playSelected(media) }
             }
 
             Item {

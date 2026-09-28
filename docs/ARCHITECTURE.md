@@ -20,9 +20,10 @@ media URLs below the configured WebDAV root. The shared catalog contract is in
 [`MEDIA_CATALOG.md`](MEDIA_CATALOG.md).
 
 TMDB poster and background URLs are cached as files in
-`~/.local/share/qPlay/poster` and `~/.local/share/qPlay/background`. On a cache
-miss, qPlay displays the remote image while downloading it; once saved, the
-image source switches to the local file. Later launches use the cached file.
+`~/.local/share/qPlay/poster`, `~/.local/share/qPlay/background`, and
+`~/.local/share/qPlay/episode`. On a cache miss, qPlay displays the remote image
+while downloading it; once saved, the image source switches to the local file.
+Later launches use the cached file.
 
 The user-facing name, executable, Qt application name, and organization are
 `qPlay`. The `QuarkTV` C++ namespace and QML module remain internal identifiers.

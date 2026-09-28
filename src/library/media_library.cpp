@@ -5,11 +5,40 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
 
 namespace QuarkTV::Library {
+
+namespace {
+
+QString seasonDisplayName(int seasonNumber, const QString &seasonName)
+{
+    if (!seasonName.trimmed().isEmpty()) return seasonName.trimmed();
+    if (seasonNumber == 0) return QStringLiteral("特别篇");
+    if (seasonNumber < 0) return QStringLiteral("第%1季").arg(seasonNumber);
+
+    const QStringList digits{QStringLiteral("零"), QStringLiteral("一"), QStringLiteral("二"),
+                             QStringLiteral("三"), QStringLiteral("四"), QStringLiteral("五"),
+                             QStringLiteral("六"), QStringLiteral("七"), QStringLiteral("八"),
+                             QStringLiteral("九"), QStringLiteral("十")};
+    QString number;
+    if (seasonNumber <= 10) {
+        number = digits.at(seasonNumber);
+    } else if (seasonNumber < 20) {
+        number = QStringLiteral("十") + digits.at(seasonNumber % 10);
+    } else if (seasonNumber < 100) {
+        number = digits.at(seasonNumber / 10) + QStringLiteral("十")
+                 + (seasonNumber % 10 == 0 ? QString() : digits.at(seasonNumber % 10));
+    } else {
+        number = QString::number(seasonNumber);
+    }
+    return QStringLiteral("第%1季").arg(number);
+}
+
+} // namespace
 
 MediaLibrary::MediaLibrary(QObject *parent)
     : QObject(parent)
@@ -134,8 +163,10 @@ bool MediaLibrary::initialize(QString *error)
             media_type TEXT NOT NULL DEFAULT 'movie',
             series_title TEXT NOT NULL DEFAULT '',
             season_number INTEGER NOT NULL DEFAULT 0,
+            season_name TEXT NOT NULL DEFAULT '',
             episode_number INTEGER NOT NULL DEFAULT 0,
             episode_title TEXT NOT NULL DEFAULT '',
+            still_url TEXT NOT NULL DEFAULT '',
             last_opened_ms INTEGER NOT NULL DEFAULT 0,
             created_ms INTEGER NOT NULL DEFAULT 0
         );
@@ -161,8 +192,10 @@ bool MediaLibrary::initialize(QString *error)
         {QStringLiteral("media_type"), QStringLiteral("TEXT NOT NULL DEFAULT 'movie'")},
         {QStringLiteral("series_title"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
         {QStringLiteral("season_number"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")},
+        {QStringLiteral("season_name"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
         {QStringLiteral("episode_number"), QStringLiteral("INTEGER NOT NULL DEFAULT 0")},
         {QStringLiteral("episode_title"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
+        {QStringLiteral("still_url"), QStringLiteral("TEXT NOT NULL DEFAULT ''")},
     };
     for (const auto &[name, type] : migrations) {
         QSqlQuery columns(database_);
@@ -226,25 +259,36 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
 {
     QVariantList result;
     if (!database_.isOpen()) return result;
+    QHash<QString, int> seriesIndices;
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(R"(
         SELECT source, title, format_name, duration_ms, position_ms, play_count,
                favorite, last_opened_ms, width, height, poster_url, overview, release_date, tmdb_id,
-               backdrop_url, rating, media_type, series_title, season_number, episode_number, episode_title
+               backdrop_url, rating, media_type, series_title, season_number, season_name,
+               episode_number, episode_title, still_url
         FROM media
         WHERE title LIKE ? COLLATE NOCASE
-        ORDER BY title COLLATE NOCASE, last_opened_ms DESC
+           OR series_title LIKE ? COLLATE NOCASE
+           OR episode_title LIKE ? COLLATE NOCASE
+        ORDER BY CASE WHEN media_type = 'episode'
+                      THEN COALESCE(NULLIF(series_title, ''), title)
+                      ELSE title END COLLATE NOCASE,
+                 CASE WHEN media_type = 'episode' THEN 0 ELSE 1 END,
+                 season_number, episode_number, title COLLATE NOCASE
         LIMIT ?
     )"));
-    query.addBindValue(QStringLiteral("%") + filter + QLatin1Char('%'));
-    query.addBindValue(qBound(1, limit, 2000));
+    const QString pattern = QStringLiteral("%") + filter + QLatin1Char('%');
+    query.addBindValue(pattern);
+    query.addBindValue(pattern);
+    query.addBindValue(pattern);
+    query.addBindValue(qBound(1, limit, 5000));
     if (!query.exec()) return result;
     while (query.next()) {
         const QString stored = query.value(0).toString();
         const QUrl source = !stored.contains(QStringLiteral("://"))
                                 ? QUrl::fromLocalFile(stored)
                                 : QUrl::fromUserInput(stored);
-        result.append(QVariantMap{
+        QVariantMap item{
             {QStringLiteral("source"), source},
             {QStringLiteral("title"), query.value(1).toString()},
             {QStringLiteral("formatName"), query.value(2).toString()},
@@ -264,9 +308,121 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             {QStringLiteral("mediaType"), query.value(16).toString()},
             {QStringLiteral("seriesTitle"), query.value(17).toString()},
             {QStringLiteral("seasonNumber"), query.value(18).toInt()},
-            {QStringLiteral("episodeNumber"), query.value(19).toInt()},
-            {QStringLiteral("episodeTitle"), query.value(20).toString()},
-        });
+            {QStringLiteral("seasonName"), query.value(19).toString()},
+            {QStringLiteral("episodeNumber"), query.value(20).toInt()},
+            {QStringLiteral("episodeTitle"), query.value(21).toString()},
+            {QStringLiteral("stillUrl"), query.value(22).toString()},
+        };
+
+        if (query.value(16).toString() != QLatin1String("episode")) {
+            result.append(item);
+            continue;
+        }
+
+        const QString seriesTitle = query.value(17).toString().trimmed().isEmpty()
+                                        ? query.value(1).toString().trimmed()
+                                        : query.value(17).toString().trimmed();
+        const int tmdbId = query.value(13).toInt();
+        const QString key = tmdbId > 0
+                                ? QStringLiteral("tmdb:%1").arg(tmdbId)
+                                : QStringLiteral("title:%1").arg(seriesTitle.toCaseFolded());
+        const int season = query.value(18).toInt();
+        const QString seasonName = query.value(19).toString().trimmed();
+        const int episodeNumber = query.value(20).toInt();
+        const QString episodeTitle = query.value(21).toString();
+        const QString seasonLabel = seasonDisplayName(season, seasonName);
+        const QString displayTitle = QStringLiteral("S%1E%2%3")
+                                         .arg(season, 2, 10, QLatin1Char('0'))
+                                         .arg(episodeNumber, 2, 10, QLatin1Char('0'))
+                                         .arg(episodeTitle.isEmpty()
+                                                  ? QString()
+                                                  : QStringLiteral(" · ") + episodeTitle);
+        const QVariantMap episode{
+            {QStringLiteral("source"), source},
+            {QStringLiteral("title"), query.value(1).toString()},
+            {QStringLiteral("overview"), query.value(11).toString()},
+            {QStringLiteral("episodeTitle"), episodeTitle},
+            {QStringLiteral("displayTitle"), displayTitle},
+            {QStringLiteral("stillUrl"), query.value(22).toString()},
+            {QStringLiteral("seasonNumber"), season},
+            {QStringLiteral("seasonName"), seasonName},
+            {QStringLiteral("episodeNumber"), episodeNumber},
+            {QStringLiteral("positionMs"), query.value(4).toLongLong()},
+            {QStringLiteral("durationMs"), query.value(3).toLongLong()},
+            {QStringLiteral("lastOpenedMs"), query.value(7).toLongLong()},
+            {QStringLiteral("favorite"), query.value(6).toBool()},
+        };
+        const QVariantMap seasonEntry{
+            {QStringLiteral("seasonNumber"), season},
+            {QStringLiteral("seasonName"), seasonName},
+            {QStringLiteral("displayName"), seasonLabel},
+            {QStringLiteral("episodes"), QVariantList{episode}},
+        };
+
+        const auto existing = seriesIndices.constFind(key);
+        if (existing == seriesIndices.cend()) {
+            item[QStringLiteral("title")] = seriesTitle;
+            item[QStringLiteral("seriesTitle")] = seriesTitle;
+            item[QStringLiteral("mediaType")] = QStringLiteral("series");
+            item[QStringLiteral("episodes")] = QVariantList{episode};
+            item[QStringLiteral("episodeCount")] = 1;
+            item[QStringLiteral("seasons")] = QVariantList{seasonEntry};
+            item[QStringLiteral("seasonCount")] = 1;
+            item[QStringLiteral("resumeEpisode")] = QVariantMap{};
+            if (query.value(4).toLongLong() > 0) {
+                item[QStringLiteral("resumeEpisode")] = episode;
+            }
+            seriesIndices.insert(key, result.size());
+            result.append(item);
+            continue;
+        }
+
+        const int index = existing.value();
+        QVariantMap series = result.at(index).toMap();
+        QVariantList episodes = series.value(QStringLiteral("episodes")).toList();
+        episodes.append(episode);
+        series[QStringLiteral("episodes")] = episodes;
+        series[QStringLiteral("episodeCount")] = episodes.size();
+        QVariantList seasons = series.value(QStringLiteral("seasons")).toList();
+        int seasonIndex = -1;
+        for (int i = 0; i < seasons.size(); ++i) {
+            if (seasons.at(i).toMap().value(QStringLiteral("seasonNumber")).toInt() == season) {
+                seasonIndex = i;
+                break;
+            }
+        }
+        if (seasonIndex < 0) {
+            seasons.append(seasonEntry);
+        } else {
+            QVariantMap currentSeason = seasons.at(seasonIndex).toMap();
+            QVariantList seasonEpisodes = currentSeason.value(QStringLiteral("episodes")).toList();
+            seasonEpisodes.append(episode);
+            currentSeason[QStringLiteral("episodes")] = seasonEpisodes;
+            if (currentSeason.value(QStringLiteral("seasonName")).toString().isEmpty()
+                && !seasonName.isEmpty()) {
+                currentSeason[QStringLiteral("seasonName")] = seasonName;
+                currentSeason[QStringLiteral("displayName")] = seasonName;
+            }
+            seasons[seasonIndex] = currentSeason;
+        }
+        series[QStringLiteral("seasons")] = seasons;
+        series[QStringLiteral("seasonCount")] = seasons.size();
+        if (series.value(QStringLiteral("posterUrl")).toString().isEmpty())
+            series[QStringLiteral("posterUrl")] = item.value(QStringLiteral("posterUrl"));
+        if (series.value(QStringLiteral("backdropUrl")).toString().isEmpty())
+            series[QStringLiteral("backdropUrl")] = item.value(QStringLiteral("backdropUrl"));
+        const QVariantMap currentResume = series.value(QStringLiteral("resumeEpisode")).toMap();
+        if (query.value(4).toLongLong() > 0
+            && (currentResume.isEmpty()
+                || query.value(7).toLongLong() > currentResume.value(QStringLiteral("lastOpenedMs")).toLongLong())) {
+            series[QStringLiteral("resumeEpisode")] = episode;
+            series[QStringLiteral("source")] = source;
+            series[QStringLiteral("positionMs")] = query.value(4).toLongLong();
+            series[QStringLiteral("durationMs")] = query.value(3).toLongLong();
+            series[QStringLiteral("lastOpenedMs")] = query.value(7).toLongLong();
+            series[QStringLiteral("favorite")] = query.value(6).toBool();
+        }
+        result[index] = series;
     }
     return result;
 }

@@ -8,8 +8,7 @@ not use a browser or HTML video element.
 The home screen presents a cinematic feature area and poster rows. Selecting a
 poster opens a title details page; playback starts only from that page. TMDB
 metadata can be matched with a locally stored v3 API key. The in-app player
-supports mpv seeking, audio/subtitle selection, playback speed, volume, and
-resume position.
+supports mpv seeking, playback speed, volume, and resume position.
 
 ## Dependencies
 
@@ -48,6 +47,7 @@ separate scraper skill reads the TMDB credentials. The catalog schema is documen
 On Linux, playback history and the catalogue are stored in
 `~/.local/share/qPlay/library.sqlite3`. Existing data from earlier application
 directories is copied there on first launch; the original database is kept.
-TMDB poster and background images are downloaded on first display and cached
-under `~/.local/share/qPlay/poster` and `~/.local/share/qPlay/background`.
-Later launches use those local files instead of fetching the same images again.
+TMDB poster, background, and episode still images are downloaded on first
+display and cached under `~/.local/share/qPlay/poster`,
+`~/.local/share/qPlay/background`, and `~/.local/share/qPlay/episode`. Later
+launches use those local files instead of fetching the same images again.

@@ -45,10 +45,33 @@ Item {
         contentWidth: availableWidth
         ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-        Column {
-            id: content
-            width: pageScroll.availableWidth
-            spacing: 0
+        Flickable {
+            id: pageFlickable
+            anchors.fill: parent
+            clip: true
+            contentWidth: width
+            contentHeight: content.implicitHeight
+            maximumFlickVelocity: 5000
+            boundsBehavior: Flickable.StopAtBounds
+
+            WheelHandler {
+                target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: function(event) {
+                    const delta = event.pixelDelta.y !== 0
+                            ? event.pixelDelta.y
+                            : event.angleDelta.y / 8
+                    const maxY = Math.max(0, pageFlickable.contentHeight - pageFlickable.height)
+                    pageFlickable.contentY = Math.max(0, Math.min(maxY,
+                                                                   pageFlickable.contentY - delta * 2))
+                    event.accepted = true
+                }
+            }
+
+            Column {
+                id: content
+                width: pageFlickable.width
+                spacing: 0
 
             Item {
                 width: content.width
@@ -64,25 +87,16 @@ Item {
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
-                    opacity: 0.56
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: "#080808" }
-                        GradientStop { position: 0.42; color: "#99080808" }
-                        GradientStop { position: 1.0; color: "#88080808" }
-                    }
+                    opacity: 0.42
                 }
 
                 Rectangle {
                     anchors.fill: parent
                     gradient: Gradient {
                         GradientStop { position: 0.0; color: "transparent" }
-                        GradientStop { position: 0.68; color: "#080808" }
-                        GradientStop { position: 1.0; color: "#080808" }
+                        GradientStop { position: 0.75; color: "transparent" }
+                        GradientStop { position: 0.9; color: "#b3080808" }
+                        GradientStop { position: 1.0; color: "#f2080808" }
                     }
                 }
 
@@ -96,7 +110,7 @@ Item {
                     spacing: 14
 
                     Text {
-                        text: "影片精选"
+                        text: root.featured && root.featured.mediaType === "series" ? "剧集精选" : "影片精选"
                         color: "#e50914"
                         font.pixelSize: 13
                         font.weight: Font.Bold
@@ -230,6 +244,7 @@ Item {
                     }
                 }
             }
+            }
         }
     }
 
@@ -319,6 +334,8 @@ Item {
                           ? "S" + (modelData.seasonNumber < 10 ? "0" : "") + modelData.seasonNumber
                             + "E" + (modelData.episodeNumber < 10 ? "0" : "") + modelData.episodeNumber
                             + (modelData.episodeTitle ? "  ·  " + modelData.episodeTitle : "")
+                          : modelData.mediaType === "series"
+                            ? modelData.episodeCount + " 集"
                           : (modelData.rating > 0
                              ? "★ " + Number(modelData.rating).toFixed(1)
                                + (modelData.releaseDate ? "  ·  " + modelData.releaseDate.substring(0, 4) : "")

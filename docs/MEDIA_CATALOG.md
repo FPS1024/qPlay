@@ -19,8 +19,10 @@ credential-free WebDAV playback URL as the unique `source` key.
 | `media_type` | `movie` or `episode`. |
 | `series_title` | Series title for episode rows; empty for movies. |
 | `season_number` | Season number, zero for specials or movies. |
+| `season_name` | TMDB season name when available; qPlay falls back to a localized ordinal label. |
 | `episode_number` | Episode number, zero for movies. |
 | `episode_title` | Episode title; empty for movies. |
+| `still_url` | TMDB episode still image URL; empty when no still is available. |
 
 The table also contains qPlay-owned playback state and technical fields:
 `position_ms`, `play_count`, `favorite`, `last_opened_ms`, `duration_ms`,
@@ -36,5 +38,7 @@ Do not include credentials in
 
 SQLite upserts should run in a transaction. Store WebDAV URLs for the actual
 video files (including each episode), not folder URLs. qPlay loads catalog
-changes on startup, so restart qPlay after a scraper run to refresh the poster
-wall.
+changes on startup, groups episode rows by TMDB series ID, and exposes seasons
+and paged episode cards separately on the details page. Each card can show its
+TMDB still image, episode number, title, and synopsis. Restart qPlay after a
+scraper run to refresh the poster wall.
