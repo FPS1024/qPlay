@@ -137,9 +137,9 @@ Item {
                 spacing: Math.max(28, root.width * 0.04)
 
                 ColumnLayout {
-                    Layout.preferredWidth: Math.min(root.isSeries ? 210 : 290,
+                    Layout.preferredWidth: Math.min(root.isSeries ? 170 : 290,
                                                     (root.width - 2 * root.contentSideMargin)
-                                                    * (root.isSeries ? 0.24 : 0.29))
+                                                    * (root.isSeries ? 0.20 : 0.29))
                     Layout.alignment: Qt.AlignTop
                     spacing: 12
 
