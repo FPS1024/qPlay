@@ -292,20 +292,6 @@ Item {
                     }
 
                     Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: 3
-                        visible: modelData.positionMs > 0 && modelData.durationMs > 0
-                        color: "#555"
-                        Rectangle {
-                            width: parent.width * Math.min(1, modelData.positionMs / modelData.durationMs)
-                            height: parent.height
-                            color: "#e50914"
-                        }
-                    }
-
-                    Rectangle {
                         anchors.fill: parent
                         color: cardMouse.containsMouse ? "#26000000" : "transparent"
                         border.width: cardMouse.containsMouse ? 2 : 0
