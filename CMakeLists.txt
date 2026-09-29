@@ -6,6 +6,8 @@ project(qPlay
     LANGUAGES CXX
 )
 
+include(GNUInstallDirs)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -31,4 +33,12 @@ add_subdirectory(src)
 install(TARGETS quarktv
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
+)
+
+install(FILES packaging/qplay.desktop
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+install(FILES assets/icons/qPlay.png
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
+    RENAME qplay.png
 )

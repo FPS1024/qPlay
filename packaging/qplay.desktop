@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=qPlay
+Comment=Watch your movie and TV library
+Exec=qPlay %U
+Icon=qplay
+Terminal=false
+Categories=AudioVideo;Player;Video;
+MimeType=video/mp4;video/x-matroska;video/webm;video/mpeg;video/quicktime;

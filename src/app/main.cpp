@@ -3,6 +3,7 @@
 
 #include <QFileInfo>
 #include <QApplication>
+#include <QIcon>
 #include <QCommandLineParser>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -19,6 +20,7 @@ int main(int argc, char *argv[])
     application.setApplicationVersion(QStringLiteral("1.0.0"));
     application.setOrganizationName(QStringLiteral("qPlay"));
     application.setOrganizationDomain(QStringLiteral("qplay.local"));
+    application.setWindowIcon(QIcon(QStringLiteral(":/icons/qPlay.png")));
 
     QCommandLineParser commandLine;
     commandLine.setApplicationDescription(QStringLiteral("qPlay media player"));

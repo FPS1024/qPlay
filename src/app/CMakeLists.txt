@@ -21,6 +21,12 @@ qt_add_executable(quarktv
     main.cpp
 )
 
+qt_add_resources(quarktv "qplay_icon"
+    PREFIX "/icons"
+    BASE "${PROJECT_SOURCE_DIR}/assets/icons"
+    FILES "${PROJECT_SOURCE_DIR}/assets/icons/qPlay.png"
+)
+
 target_link_libraries(quarktv PRIVATE quarktv_app_core Qt6::Quick Qt6::QuickControls2)
 
 qt_add_resources(quarktv "quarktv_qml"
