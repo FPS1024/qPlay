@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-build_dir="${QPLAY_BUILD_DIR:-${repo_root}/build-deb}"
+build_dir="${QPLAY_BUILD_DIR:-${repo_root}/build}"
 dist_dir="${QPLAY_DIST_DIR:-${repo_root}/dist}"
 version="$(sed -nE '/^project\(qPlay/,/^\)/ s/^[[:space:]]*VERSION[[:space:]]+([0-9]+(\.[0-9]+)*)[[:space:]]*$/\1/p' "${repo_root}/CMakeLists.txt" | head -n 1)"
 platform="$(uname -s)"

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(qPlay
-    VERSION 1.0.0
+    VERSION 1.0.1
     DESCRIPTION "qPlay desktop media library and player powered by Qt 6 and libmpv"
     LANGUAGES CXX
 )

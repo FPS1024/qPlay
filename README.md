@@ -39,8 +39,8 @@ version, platform, and architecture in the filenames:
 ```
 
 Artifacts are written to `dist/`, for example
-`qPlay-1.0.0-Linux-x86_64.deb` and `qPlay-1.0.0-Linux-x86_64.bin`. Install the
-Debian package with `sudo apt install ./dist/qPlay-1.0.0-Linux-x86_64.deb`.
+`qPlay-1.0.1-Linux-x86_64.deb` and `qPlay-1.0.1-Linux-x86_64.bin`. Install the
+Debian package with `sudo apt install ./dist/qPlay-1.0.1-Linux-x86_64.deb`.
 The package declares shared-library dependencies and the required Qt Quick QML
 modules in its Debian metadata.
 

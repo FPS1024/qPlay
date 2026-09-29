@@ -19,6 +19,7 @@ ApplicationWindow {
     property int page: 0 // 0: browse, 1: details, 2: playback
     property bool controlsVisible: true
     property var selectedMedia: ({})
+    property string playbackHeaderTitle: ""
 
     function playSelected(playbackMedia) {
         const target = playbackMedia || selectedMedia
@@ -37,6 +38,7 @@ ApplicationWindow {
             }
             displayTitle = show && episode ? show + " · " + episode : (episode || show)
         }
+        window.playbackHeaderTitle = displayTitle
 
         if (player.source.toString() === target.source.toString()) {
             if (player.playbackState !== PlaybackState.Playing)
@@ -77,8 +79,10 @@ ApplicationWindow {
     Connections {
         target: player
         function onSourceChanged() {
-            if (player.source && player.source.toString().length > 0)
+            if (player.source && player.source.toString().length > 0) {
                 window.page = 2
+                window.playbackHeaderTitle = player.title
+            }
         }
     }
 
@@ -334,7 +338,7 @@ ApplicationWindow {
                             spacing: 3
                             Text {
                                 Layout.fillWidth: true
-                                text: player.title
+                                text: window.playbackHeaderTitle || player.title
                                 color: "#f5f5f1"
                                 font.pixelSize: 16
                                 font.weight: Font.DemiBold

@@ -575,7 +575,7 @@ QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &ki
         const QRegularExpression sizePath(QStringLiteral("^(/t/p/)(?:w[0-9]+|original)(/.*)$"));
         const auto match = sizePath.match(remote.path());
         if (match.hasMatch())
-            remote.setPath(match.captured(1) + QStringLiteral("w1920") + match.captured(2));
+            remote.setPath(match.captured(1) + QStringLiteral("original") + match.captured(2));
     }
     if (remote.isLocalFile() || (remote.scheme() != QLatin1String("http")
                                 && remote.scheme() != QLatin1String("https"))) {
