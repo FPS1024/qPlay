@@ -29,6 +29,21 @@ cmake --build build
 ./build/bin/qPlay
 ```
 
+## Debian package
+
+Build Debian packages and a standalone dynamically linked binary artifact with
+version, platform, and architecture in the filenames:
+
+```bash
+./scripts/build-deb.sh
+```
+
+Artifacts are written to `dist/`, for example
+`qPlay-1.0.0-Linux-x86_64.deb` and `qPlay-1.0.0-Linux-x86_64.bin`. Install the
+Debian package with `sudo apt install ./dist/qPlay-1.0.0-Linux-x86_64.deb`.
+The package declares shared-library dependencies and the required Qt Quick QML
+modules in its Debian metadata.
+
 The library catalog is prepared by a separate AI agent skill. It reads the
 configured WebDAV root, matches movies and episodes with TMDB, and writes
 metadata and playback URLs to SQLite. qPlay only displays that catalog and

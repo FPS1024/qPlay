@@ -42,3 +42,20 @@ install(FILES assets/icons/qPlay.png
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps
     RENAME qplay.png
 )
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "qPlay")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VENDOR "qPlay")
+set(CPACK_PACKAGE_CONTACT "qPlay maintainers")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Native desktop media library and player powered by libmpv")
+set(CPACK_PACKAGE_FILE_NAME "qPlay-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_DEBIAN_PACKAGE_NAME "qplay")
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "qPlay maintainers")
+set(CPACK_DEBIAN_PACKAGE_SECTION "video")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}.deb")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS
+    "qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, libqt6sql6-sqlite")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+include(CPack)

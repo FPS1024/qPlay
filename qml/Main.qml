@@ -25,11 +25,24 @@ ApplicationWindow {
         if (!target || !target.source)
             return
 
+        let displayTitle = target.title || ""
+        if (target.mediaType === "episode") {
+            const show = target.seriesTitle || target.title || ""
+            let episode = target.episodeTitle || ""
+            if (!episode && target.seasonNumber !== undefined && target.episodeNumber !== undefined) {
+                const seasonNumber = Number(target.seasonNumber)
+                const episodeNumber = Number(target.episodeNumber)
+                episode = "S" + (seasonNumber < 10 ? "0" : "") + seasonNumber
+                          + "E" + (episodeNumber < 10 ? "0" : "") + episodeNumber
+            }
+            displayTitle = show && episode ? show + " · " + episode : (episode || show)
+        }
+
         if (player.source.toString() === target.source.toString()) {
             if (player.playbackState !== PlaybackState.Playing)
                 player.play()
         } else {
-            player.open(target.source)
+            player.openWithTitle(target.source, displayTitle)
         }
         page = 2
         controlsVisible = true

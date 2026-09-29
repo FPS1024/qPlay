@@ -340,6 +340,8 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
         const QVariantMap episode{
             {QStringLiteral("source"), source},
             {QStringLiteral("title"), query.value(1).toString()},
+            {QStringLiteral("seriesTitle"), seriesTitle},
+            {QStringLiteral("mediaType"), QStringLiteral("episode")},
             {QStringLiteral("overview"), query.value(11).toString()},
             {QStringLiteral("episodeTitle"), episodeTitle},
             {QStringLiteral("displayTitle"), displayTitle},

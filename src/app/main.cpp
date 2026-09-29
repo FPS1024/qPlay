@@ -1,5 +1,6 @@
 #include "player_engine.h"
 #include "video/mpv_video_item.h"
+#include "build_info.h"
 
 #include <QFileInfo>
 #include <QApplication>
@@ -17,7 +18,7 @@ int main(int argc, char *argv[])
     QApplication application(argc, argv);
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     application.setApplicationName(QStringLiteral("qPlay"));
-    application.setApplicationVersion(QStringLiteral("1.0.0"));
+    application.setApplicationVersion(QStringLiteral(QPLAY_VERSION " (" QPLAY_PLATFORM " " QPLAY_ARCHITECTURE ")"));
     application.setOrganizationName(QStringLiteral("qPlay"));
     application.setOrganizationDomain(QStringLiteral("qplay.local"));
     application.setWindowIcon(QIcon(QStringLiteral(":/icons/qPlay.png")));

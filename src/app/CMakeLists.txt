@@ -21,6 +21,9 @@ qt_add_executable(quarktv
     main.cpp
 )
 
+configure_file(build_info.h.in build_info.h @ONLY)
+target_include_directories(quarktv PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
 qt_add_resources(quarktv "qplay_icon"
     PREFIX "/icons"
     BASE "${PROJECT_SOURCE_DIR}/assets/icons"

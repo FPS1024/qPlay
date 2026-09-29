@@ -336,14 +336,25 @@ int PlayerEngine::imageCacheRevision() const noexcept
 
 void PlayerEngine::open(const QUrl &source)
 {
+    openInternal(source, {});
+}
+
+void PlayerEngine::openWithTitle(const QUrl &source, const QString &displayTitle)
+{
+    openInternal(source, displayTitle);
+}
+
+void PlayerEngine::openInternal(const QUrl &source, const QString &displayTitle)
+{
     if (!source.isValid()) {
         setStatusMessage(tr("The selected media URL is invalid."));
         return;
     }
 
     saveProgress();
+    playbackTitleOverride_ = displayTitle.trimmed();
     source_ = source;
-    title_ = displayNameFor(source);
+    title_ = playbackTitleOverride_.isEmpty() ? displayNameFor(source) : playbackTitleOverride_;
     durationMs_ = 0;
     positionMs_ = 0;
     mediaInfo_ = {};
@@ -557,8 +568,15 @@ QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &ki
                                  : kind == QLatin1String("episode")
                                        ? QStringLiteral("episode")
                                        : QStringLiteral("poster");
-    const QUrl remote(remoteUrl.trimmed());
+    QUrl remote(remoteUrl.trimmed());
     if (!remote.isValid() || remote.isEmpty()) return {};
+    if (category == QLatin1String("background")
+        && remote.host().compare(QStringLiteral("image.tmdb.org"), Qt::CaseInsensitive) == 0) {
+        const QRegularExpression sizePath(QStringLiteral("^(/t/p/)(?:w[0-9]+|original)(/.*)$"));
+        const auto match = sizePath.match(remote.path());
+        if (match.hasMatch())
+            remote.setPath(match.captured(1) + QStringLiteral("w1920") + match.captured(2));
+    }
     if (remote.isLocalFile() || (remote.scheme() != QLatin1String("http")
                                 && remote.scheme() != QLatin1String("https"))) {
         return remote;
@@ -721,7 +739,8 @@ void PlayerEngine::handleMediaOpened(const MediaInfo &media)
 {
     mediaInfo_ = media;
     source_ = media.source;
-    title_ = media.title;
+    title_ = playbackTitleOverride_.isEmpty() ? media.title : playbackTitleOverride_;
+    playbackTitleOverride_.clear();
     durationMs_ = qMax<qint64>(0, media.durationMs);
     videoTracks_ = tracksByType(media, TrackType::Video);
     audioTracks_ = tracksByType(media, TrackType::Audio);

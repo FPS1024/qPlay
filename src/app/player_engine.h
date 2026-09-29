@@ -86,6 +86,7 @@ public:
     [[nodiscard]] int imageCacheRevision() const noexcept;
 
     Q_INVOKABLE void open(const QUrl &source);
+    Q_INVOKABLE void openWithTitle(const QUrl &source, const QString &displayTitle);
     Q_INVOKABLE void openPath(const QString &path);
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
@@ -140,6 +141,7 @@ private:
     void handlePlaybackFinished();
     void saveProgress(bool resetAtEnd = false);
     void appendPlaylistEntry(const QUrl &source, const QString &title);
+    void openInternal(const QUrl &source, const QString &displayTitle);
     [[nodiscard]] static QVariantList tracksByType(const MediaInfo &media, TrackType type);
 
     QuarkTV::Mpv::MpvSession *session_ = nullptr;
@@ -155,6 +157,7 @@ private:
     PlaybackState playbackState_ = PlaybackState::Stopped;
     QUrl source_;
     QString title_;
+    QString playbackTitleOverride_;
     QString videoCodec_;
     QString videoResolution_;
     qint64 videoBitrate_ = 0;
