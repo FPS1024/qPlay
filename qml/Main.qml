@@ -143,7 +143,6 @@ ApplicationWindow {
     Shortcut {
         sequence: "F11"
         context: Qt.ApplicationShortcut
-        enabled: window.page === 2
         onActivated: window.toggleFullscreen()
     }
 
@@ -168,7 +167,7 @@ ApplicationWindow {
         spacing: 0
 
         Rectangle {
-            visible: !(window.page === 2 && window.visibility === Window.FullScreen)
+            visible: window.visibility !== Window.FullScreen
             Layout.fillWidth: true
             Layout.preferredHeight: 68
             color: "#0b0b0b"
