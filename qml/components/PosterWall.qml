@@ -8,6 +8,7 @@ Item {
     property var engine: null
     property var entries: []
     property string filterText: ""
+    property string catalogSection: "home"
     property var continueEntries: []
     property var featured: entries.length > 0 ? entries[0] : null
     property int imageCacheRevision: engine ? engine.imageCacheRevision : 0
@@ -20,9 +21,21 @@ Item {
     signal detailsRequested(var media)
 
     onFilterTextChanged: reload()
+    onCatalogSectionChanged: {
+        reload()
+        pageFlickable.contentY = 0
+    }
 
     function reload() {
-        entries = engine ? engine.libraryMedia(filterText) : []
+        const catalog = engine ? engine.libraryMedia(filterText) : []
+        if (catalogSection === "series")
+            entries = catalog.filter(function(item) { return item.mediaType === "series" })
+        else if (catalogSection === "movies")
+            entries = catalog.filter(function(item) { return item.mediaType === "movie" })
+        else if (catalogSection === "favorites")
+            entries = catalog.filter(function(item) { return item.favorite })
+        else
+            entries = catalog
         continueEntries = entries.filter(function(item) { return item.positionMs > 0 })
     }
 
@@ -213,7 +226,11 @@ Item {
                         visible: root.entries.length > 0
 
                         Text {
-                            text: root.filterText.length > 0 ? "搜索结果" : "为你推荐"
+                            text: root.filterText.length > 0 ? "搜索结果"
+                                  : root.catalogSection === "series" ? "电视剧"
+                                  : root.catalogSection === "movies" ? "电影"
+                                  : root.catalogSection === "favorites" ? "我的收藏"
+                                  : "为你推荐"
                             color: "#f5f5f1"
                             font.pixelSize: 21
                             font.weight: Font.DemiBold
@@ -237,7 +254,11 @@ Item {
                         visible: root.entries.length === 0
                         Text {
                             anchors.centerIn: parent
-                            text: root.filterText.length > 0 ? "没有找到相关影片" : "影片内容将在这里呈现"
+                            text: root.filterText.length > 0 ? "没有找到相关影片"
+                                  : root.catalogSection === "favorites" ? "还没有收藏的影视"
+                                  : root.catalogSection === "series" ? "还没有识别到电视剧"
+                                  : root.catalogSection === "movies" ? "还没有识别到电影"
+                                  : "影片内容将在这里呈现"
                             color: "#929292"
                             font.pixelSize: 16
                         }

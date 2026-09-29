@@ -384,7 +384,8 @@ Item {
                             onClicked: {
                                 if (root.engine && root.media) {
                                     const nextFavorite = !root.media.favorite
-                                    root.engine.setFavorite(root.media.source, nextFavorite)
+                                    root.engine.setFavorite(root.media.favoriteSource || root.media.source,
+                                                            nextFavorite)
                                     const updatedMedia = Object.assign({}, root.media)
                                     updatedMedia.favorite = nextFavorite
                                     root.media = updatedMedia

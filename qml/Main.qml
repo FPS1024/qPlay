@@ -195,12 +195,45 @@ ApplicationWindow {
                     font.letterSpacing: 0.4
                 }
 
-                Text {
+                RowLayout {
                     visible: window.page === 0
-                    text: "首页"
-                    color: "#f5f5f1"
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
+                    spacing: 18
+
+                    Repeater {
+                        model: [
+                            { label: "首页", section: "home" },
+                            { label: "电视剧", section: "series" },
+                            { label: "电影", section: "movies" },
+                            { label: "收藏", section: "favorites" }
+                        ]
+
+                        delegate: Button {
+                            id: catalogNavButton
+                            required property var modelData
+                            text: modelData.label
+                            onClicked: homeView.catalogSection = modelData.section
+                            background: Rectangle {
+                                color: "transparent"
+                                Rectangle {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.bottom: parent.bottom
+                                    width: homeView.catalogSection === catalogNavButton.modelData.section
+                                           ? parent.width * 0.55 : 0
+                                    height: 2
+                                    color: "#e50914"
+                                }
+                            }
+                            contentItem: Text {
+                                text: catalogNavButton.text
+                                color: homeView.catalogSection === catalogNavButton.modelData.section
+                                       ? "#ffffff" : catalogNavButton.hovered ? "#eeeeee" : "#a9a9a9"
+                                font.pixelSize: 14
+                                font.weight: homeView.catalogSection === catalogNavButton.modelData.section
+                                             ? Font.DemiBold : Font.Normal
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
                 }
 
                 Item { Layout.fillWidth: true }

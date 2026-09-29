@@ -366,6 +366,7 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             item[QStringLiteral("title")] = seriesTitle;
             item[QStringLiteral("seriesTitle")] = seriesTitle;
             item[QStringLiteral("mediaType")] = QStringLiteral("series");
+            item[QStringLiteral("favoriteSource")] = source;
             item[QStringLiteral("episodes")] = QVariantList{episode};
             item[QStringLiteral("episodeCount")] = 1;
             item[QStringLiteral("seasons")] = QVariantList{seasonEntry};
@@ -422,7 +423,6 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             series[QStringLiteral("positionMs")] = query.value(4).toLongLong();
             series[QStringLiteral("durationMs")] = query.value(3).toLongLong();
             series[QStringLiteral("lastOpenedMs")] = query.value(7).toLongLong();
-            series[QStringLiteral("favorite")] = query.value(6).toBool();
         }
         result[index] = series;
     }
