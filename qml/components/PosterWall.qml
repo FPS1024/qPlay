@@ -181,7 +181,7 @@ Item {
                     anchors.rightMargin: Math.max(28, content.width * 0.045)
                     anchors.topMargin: 4
                     anchors.bottomMargin: 48
-                    spacing: 32
+                    spacing: 40
 
                     Column {
                         width: parent.width
@@ -197,7 +197,7 @@ Item {
 
                         ListView {
                             width: parent.width
-                            height: 276
+                            height: 326
                             orientation: ListView.Horizontal
                             spacing: 14
                             clip: true
@@ -224,7 +224,7 @@ Item {
                             width: parent.width
                             height: Math.max(280, contentHeight)
                             cellWidth: Math.max(154, Math.min(198, Math.floor(width / Math.max(2, Math.floor(width / 180)))))
-                            cellHeight: 286
+                            cellHeight: 334
                             interactive: false
                             model: root.entries
                             delegate: posterCard
@@ -254,7 +254,7 @@ Item {
         Item {
             required property var modelData
             width: allTitles.cellWidth - 12
-            height: 276
+            height: width * 1.43 + 50
 
             Column {
                 anchors.fill: parent
