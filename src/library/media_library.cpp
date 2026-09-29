@@ -468,6 +468,42 @@ bool MediaLibrary::setFavorite(const QUrl &source, bool favorite)
     return query.exec() && query.numRowsAffected() > 0;
 }
 
+bool MediaLibrary::markWatched(const QUrl &source)
+{
+    if (!database_.isOpen() || !source.isValid()) return false;
+
+    QSqlQuery lookup(database_);
+    lookup.prepare(QStringLiteral(
+        "SELECT media_type, tmdb_id, series_title, title FROM media WHERE source = ?"));
+    lookup.addBindValue(sourceKey(source));
+    if (!lookup.exec() || !lookup.next()) return false;
+
+    QSqlQuery update(database_);
+    if (lookup.value(0).toString() == QLatin1String("episode")) {
+        const int tmdbId = lookup.value(1).toInt();
+        if (tmdbId > 0) {
+            update.prepare(QStringLiteral(
+                "UPDATE media SET position_ms = 0 WHERE media_type = 'episode' AND tmdb_id = ?"));
+            update.addBindValue(tmdbId);
+        } else {
+            const QString seriesTitle = lookup.value(2).toString().trimmed();
+            const QString fallbackTitle = seriesTitle.isEmpty()
+                                              ? lookup.value(3).toString().trimmed()
+                                              : seriesTitle;
+            update.prepare(QStringLiteral(
+                "UPDATE media SET position_ms = 0 WHERE media_type = 'episode' "
+                "AND (series_title = ? COLLATE NOCASE OR "
+                "(series_title = '' AND title = ? COLLATE NOCASE))"));
+            update.addBindValue(fallbackTitle);
+            update.addBindValue(fallbackTitle);
+        }
+    } else {
+        update.prepare(QStringLiteral("UPDATE media SET position_ms = 0 WHERE source = ?"));
+        update.addBindValue(sourceKey(source));
+    }
+    return update.exec() && update.numRowsAffected() > 0;
+}
+
 bool MediaLibrary::removeMedia(const QUrl &source)
 {
     if (!database_.isOpen() || !source.isValid()) {

@@ -141,6 +141,13 @@ ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "F11"
+        context: Qt.ApplicationShortcut
+        enabled: window.page === 2
+        onActivated: window.toggleFullscreen()
+    }
+
+    Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
         onActivated: {
@@ -266,20 +273,6 @@ ApplicationWindow {
                     }
                 }
 
-                Button {
-                    id: settingsButton
-                    text: "⚙"
-                    Accessible.name: "设置"
-                    onClicked: settingsDialog.open()
-                    background: Item {}
-                    contentItem: Text {
-                        text: settingsButton.text
-                        color: settingsButton.hovered ? "#ffffff" : "#bdbdbd"
-                        font.pixelSize: 21
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                }
             }
         }
 
@@ -434,11 +427,6 @@ ApplicationWindow {
                 }
             }
         }
-    }
-
-    SettingsDialog {
-        id: settingsDialog
-        engine: player
     }
 
 }

@@ -23,6 +23,7 @@ public:
     bool rememberMedia(const MediaInfo &media, qint64 positionMs = 0);
     bool updateProgress(const QUrl &source, qint64 positionMs, qint64 durationMs);
     bool setFavorite(const QUrl &source, bool favorite);
+    bool markWatched(const QUrl &source);
     bool removeMedia(const QUrl &source);
     bool clearHistory();
 

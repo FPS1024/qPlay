@@ -674,6 +674,13 @@ bool PlayerEngine::setFavorite(const QUrl &source, bool favorite)
     return changed;
 }
 
+bool PlayerEngine::markWatched(const QUrl &source)
+{
+    const bool changed = library_.markWatched(source);
+    if (changed) emit libraryChanged();
+    return changed;
+}
+
 bool PlayerEngine::removeRecent(const QUrl &source)
 {
     const bool removed = library_.removeMedia(source);

@@ -37,6 +37,11 @@ Item {
         else
             entries = catalog
         continueEntries = entries.filter(function(item) { return item.positionMs > 0 })
+                                   .map(function(item) {
+            const continueItem = Object.assign({}, item)
+            continueItem.inContinueList = true
+            return continueItem
+        })
     }
 
     Component.onCompleted: reload()
@@ -323,7 +328,24 @@ Item {
                         id: cardMouse
                         anchors.fill: parent
                         hoverEnabled: true
-                        onClicked: root.detailsRequested(modelData)
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        onClicked: function(mouse) {
+                            if (mouse.button === Qt.RightButton && modelData.inContinueList) {
+                                watchedMenu.popup()
+                            } else if (mouse.button === Qt.LeftButton) {
+                                root.detailsRequested(modelData)
+                            }
+                        }
+
+                        Menu {
+                            id: watchedMenu
+                            MenuItem {
+                                text: "标记为已观看"
+                                onTriggered: {
+                                    if (root.engine) root.engine.markWatched(modelData.source)
+                                }
+                            }
+                        }
                     }
                 }
 

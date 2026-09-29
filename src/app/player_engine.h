@@ -108,6 +108,7 @@ public:
     Q_INVOKABLE QVariantList libraryMedia(const QString &filter = {}) const;
     Q_INVOKABLE QUrl cachedImageSource(const QString &remoteUrl, const QString &kind);
     Q_INVOKABLE bool setFavorite(const QUrl &source, bool favorite);
+    Q_INVOKABLE bool markWatched(const QUrl &source);
     Q_INVOKABLE bool removeRecent(const QUrl &source);
     Q_INVOKABLE void clearRecent();
     Q_INVOKABLE qint64 resumePosition(const QUrl &source) const;
