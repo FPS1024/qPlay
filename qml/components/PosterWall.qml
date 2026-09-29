@@ -359,16 +359,10 @@ Item {
 
                 Text {
                     width: parent.width
-                    text: modelData.mediaType === "episode"
-                          ? "S" + (modelData.seasonNumber < 10 ? "0" : "") + modelData.seasonNumber
-                            + "E" + (modelData.episodeNumber < 10 ? "0" : "") + modelData.episodeNumber
-                            + (modelData.episodeTitle ? "  ·  " + modelData.episodeTitle : "")
-                          : modelData.mediaType === "series"
-                            ? modelData.episodeCount + " 集"
-                          : (modelData.rating > 0
-                             ? "★ " + Number(modelData.rating).toFixed(1)
-                               + (modelData.releaseDate ? "  ·  " + modelData.releaseDate.substring(0, 4) : "")
-                             : (modelData.releaseDate || modelData.formatName || "影片"))
+                    text: modelData.rating > 0
+                          ? "★ " + Number(modelData.rating).toFixed(1)
+                            + (modelData.releaseDate ? "  ·  " + modelData.releaseDate.substring(0, 4) : "")
+                          : (modelData.releaseDate || modelData.formatName || "影片")
                     color: "#929292"
                     font.pixelSize: 11
                     elide: Text.ElideRight
