@@ -30,6 +30,7 @@ class PlayerEngine final : public QObject
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
     Q_PROPERTY(double playbackRate READ playbackRate WRITE setPlaybackRate NOTIFY playbackRateChanged)
     Q_PROPERTY(bool buffering READ buffering NOTIFY bufferingChanged)
+    Q_PROPERTY(QVariantList cacheRanges READ cacheRanges NOTIFY cacheRangesChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(QString videoBackend READ videoBackend NOTIFY videoBackendChanged)
     Q_PROPERTY(QObject *renderSession READ renderSession CONSTANT)
@@ -66,6 +67,7 @@ public:
     [[nodiscard]] double playbackRate() const noexcept;
     void setPlaybackRate(double rate);
     [[nodiscard]] bool buffering() const noexcept;
+    [[nodiscard]] QVariantList cacheRanges() const;
     [[nodiscard]] QString statusMessage() const;
     [[nodiscard]] QString videoBackend() const;
     [[nodiscard]] QObject *renderSession() const;
@@ -126,6 +128,7 @@ signals:
     void mutedChanged();
     void playbackRateChanged();
     void bufferingChanged();
+    void cacheRangesChanged();
     void statusMessageChanged();
     void videoBackendChanged();
     void tracksChanged();
@@ -140,7 +143,7 @@ private:
     void handleMediaOpened(const MediaInfo &media);
     void handlePositionChanged(qint64 positionMs);
     void handlePlaybackFinished();
-    void saveProgress(bool resetAtEnd = false);
+    void saveProgress(bool resetAtEnd = false, bool notifyLibrary = true);
     void appendPlaylistEntry(const QUrl &source, const QString &title);
     void openInternal(const QUrl &source, const QString &displayTitle);
     [[nodiscard]] static QVariantList tracksByType(const MediaInfo &media, TrackType type);
@@ -168,6 +171,7 @@ private:
     bool muted_ = false;
     double playbackRate_ = 1.0;
     bool buffering_ = false;
+    QVariantList cacheRanges_;
     QString statusMessage_;
     QString videoBackend_ = QStringLiteral("libmpv");
     QVariantList videoTracks_;

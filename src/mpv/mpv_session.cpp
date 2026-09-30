@@ -105,6 +105,14 @@ MpvSession::MpvSession(QObject *parent, const QMap<QString, QString> &overrides)
     option("volume-max", "200");
     option("force-window", "no");
     option("pause", "yes");
+    // A forward cache gives network/WebDAV streams time to recover from
+    // short throughput dips. 256 MiB caps memory use while allowing roughly
+    // a minute of typical 1080p video to be prefetched.
+    option("cache", "auto");
+    option("cache-secs", "60");
+    option("demuxer-max-bytes", "256MiB");
+    option("cache-pause", "yes");
+    option("cache-pause-wait", "5");
     for (auto it = overrides.cbegin(); it != overrides.cend(); ++it)
         option(it.key().toUtf8().constData(), it.value().toUtf8().constData());
 
@@ -125,6 +133,7 @@ MpvSession::MpvSession(QObject *parent, const QMap<QString, QString> &overrides)
     mpv_observe_property(handle_, 5, "track-list", MPV_FORMAT_NODE);
     mpv_observe_property(handle_, 6, "video-params", MPV_FORMAT_NODE);
     mpv_observe_property(handle_, 8, "video-bitrate", MPV_FORMAT_INT64);
+    mpv_observe_property(handle_, 9, "demuxer-cache-state", MPV_FORMAT_NODE);
     mpv_request_log_messages(handle_, "warn");
     pollTimer_.setInterval(30);
     connect(&pollTimer_, &QTimer::timeout, this, &MpvSession::pollEvents);
@@ -324,6 +333,9 @@ void MpvSession::pollEvents()
                 if (buffering_ != state) { buffering_ = state; emit bufferingChanged(state); }
             } else if (qstrcmp(property->name, "track-list") == 0) {
                 refreshTracks();
+            } else if (qstrcmp(property->name, "demuxer-cache-state") == 0
+                       && property->format == MPV_FORMAT_NODE && property->data) {
+                refreshCacheRanges(static_cast<const mpv_node *>(property->data));
             } else if (qstrcmp(property->name, "video-params") == 0
                        || qstrcmp(property->name, "video-bitrate") == 0) {
                 refreshPlaybackStats();
@@ -341,6 +353,41 @@ void MpvSession::pollEvents()
         }
     }
     refreshPlaybackProperties();
+}
+
+void MpvSession::refreshCacheRanges(const mpv_node *state)
+{
+    QVariantList ranges;
+    if (state && state->format == MPV_FORMAT_NODE_MAP) {
+        for (int i = 0; i < state->u.list->num; ++i) {
+            const char *name = state->u.list->keys[i];
+            const mpv_node &value = state->u.list->values[i];
+            if (!name || qstrcmp(name, "seekable-ranges") != 0
+                || value.format != MPV_FORMAT_NODE_ARRAY)
+                continue;
+            for (int j = 0; j < value.u.list->num; ++j) {
+                const mpv_node &range = value.u.list->values[j];
+                if (range.format != MPV_FORMAT_NODE_MAP) continue;
+                double start = -1.0;
+                double end = -1.0;
+                for (int k = 0; k < range.u.list->num; ++k) {
+                    const char *field = range.u.list->keys[k];
+                    const mpv_node &timestamp = range.u.list->values[k];
+                    if (!field || timestamp.format != MPV_FORMAT_DOUBLE) continue;
+                    if (qstrcmp(field, "start") == 0) start = timestamp.u.double_;
+                    else if (qstrcmp(field, "end") == 0) end = timestamp.u.double_;
+                }
+                if (start >= 0.0 && end > start) {
+                    ranges.append(QVariantMap{{QStringLiteral("start"), qRound64(start * 1000.0)},
+                                              {QStringLiteral("end"), qRound64(end * 1000.0)}});
+                }
+            }
+            break;
+        }
+    }
+    if (cacheRanges_ == ranges) return;
+    cacheRanges_ = ranges;
+    emit cacheRangesChanged(cacheRanges_);
 }
 
 void MpvSession::refreshPlaybackProperties()

@@ -46,6 +46,7 @@ signals:
     void mediaOpened(const QuarkTV::MediaInfo &media);
     void positionChanged(qint64 positionMs);
     void durationChanged(qint64 durationMs);
+    void cacheRangesChanged(const QVariantList &ranges);
     void playbackFinished();
     void bufferingChanged(bool buffering);
     void errorOccurred(const QString &message);
@@ -63,6 +64,7 @@ private:
     void setProperty(const char *name, mpv_format format, void *value);
     void loadCurrentUrl();
     void refreshPlaybackProperties();
+    void refreshCacheRanges(const mpv_node *state);
     void refreshPlaybackStats();
     void refreshTracks();
     void handleFileLoaded();
@@ -77,6 +79,7 @@ private:
     bool renderContextReady_ = false;
     bool hasPendingOpen_ = false;
     bool buffering_ = false;
+    QVariantList cacheRanges_;
     MediaInfo currentMedia_;
 };
 

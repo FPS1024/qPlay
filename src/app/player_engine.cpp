@@ -123,6 +123,12 @@ PlayerEngine::PlayerEngine(QObject *parent)
         durationMs_ = qMax<qint64>(0, durationMs);
         emit durationChanged();
     });
+    connect(session_, &QuarkTV::Mpv::MpvSession::cacheRangesChanged, this,
+            [this](const QVariantList &ranges) {
+        if (cacheRanges_ == ranges) return;
+        cacheRanges_ = ranges;
+        emit cacheRangesChanged();
+    });
     connect(session_, &QuarkTV::Mpv::MpvSession::tracksChanged, this, [this](const MediaInfo &media) {
         videoTracks_ = tracksByType(media, TrackType::Video);
         audioTracks_ = tracksByType(media, TrackType::Audio);
@@ -172,7 +178,10 @@ PlayerEngine::PlayerEngine(QObject *parent)
     progressTimer_.setTimerType(Qt::CoarseTimer);
     connect(&progressTimer_, &QTimer::timeout, this, [this] {
         if (playbackState_ == PlaybackState::Playing) {
-            saveProgress();
+            // Persist resume position quietly while playback is running.
+            // Emitting libraryChanged here reloads the whole poster wall every
+            // five seconds and can interrupt video presentation on the GUI thread.
+            saveProgress(false, false);
         }
     });
     progressTimer_.start();
@@ -272,6 +281,11 @@ void PlayerEngine::setPlaybackRate(double rate)
 bool PlayerEngine::buffering() const noexcept
 {
     return buffering_;
+}
+
+QVariantList PlayerEngine::cacheRanges() const
+{
+    return cacheRanges_;
 }
 
 QString PlayerEngine::statusMessage() const
@@ -808,7 +822,7 @@ void PlayerEngine::handlePlaybackFinished()
     }
 }
 
-void PlayerEngine::saveProgress(bool resetAtEnd)
+void PlayerEngine::saveProgress(bool resetAtEnd, bool notifyLibrary)
 {
     if (!source_.isValid() || durationMs_ <= 0) {
         return;
@@ -819,7 +833,7 @@ void PlayerEngine::saveProgress(bool resetAtEnd)
     }
     if (library_.updateProgress(source_, positionToSave, durationMs_)) {
         lastSavedPositionMs_ = positionToSave;
-        emit libraryChanged();
+        if (notifyLibrary) emit libraryChanged();
     }
 }
 

@@ -54,6 +54,19 @@ Item {
                     height: progress.hovered || progress.pressed ? 5 : 3
                     radius: 3
                     color: "#666666"
+                    Repeater {
+                        model: root.engine ? root.engine.cacheRanges : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            x: progress.to > 0
+                               ? Math.max(0, modelData.start / progress.to) * parent.width : 0
+                            width: progress.to > 0
+                                   ? Math.max(0, Math.min(1, (modelData.end - modelData.start) / progress.to)) * parent.width : 0
+                            height: parent.height
+                            radius: parent.radius
+                            color: "#9a9a9a"
+                        }
+                    }
                     Rectangle {
                         width: progress.visualPosition * parent.width
                         height: parent.height
