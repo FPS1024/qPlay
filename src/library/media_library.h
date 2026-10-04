@@ -28,7 +28,7 @@ public:
     bool clearHistory();
 
     [[nodiscard]] QVariantList recentMedia(int limit = 50) const;
-    [[nodiscard]] QVariantList libraryMedia(const QString &filter = {}, int limit = 2000) const;
+    [[nodiscard]] QVariantList libraryMedia(const QString &filter = {}, int limit = 5000) const;
     [[nodiscard]] QVariantList favoriteMedia(int limit = 100) const;
     [[nodiscard]] qint64 resumePosition(const QUrl &source) const;
 
