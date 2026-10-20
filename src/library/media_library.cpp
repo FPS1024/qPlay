@@ -10,6 +10,8 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 
+#include <algorithm>
+
 namespace QuarkTV::Library {
 
 namespace {
@@ -260,16 +262,33 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
     QVariantList result;
     if (!database_.isOpen()) return result;
     QHash<QString, int> seriesIndices;
+    QHash<QString, int> movieIndices;
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(R"(
+        WITH matches AS (
+            SELECT source, media_type, tmdb_id, title, release_date
+            FROM media
+            WHERE title LIKE ? COLLATE NOCASE
+               OR series_title LIKE ? COLLATE NOCASE
+               OR episode_title LIKE ? COLLATE NOCASE
+        )
         SELECT source, title, format_name, duration_ms, position_ms, play_count,
                favorite, last_opened_ms, width, height, poster_url, overview, release_date, tmdb_id,
                backdrop_url, rating, media_type, series_title, season_number, season_name,
-               episode_number, episode_title, still_url
+               episode_number, episode_title, still_url, bitrate
         FROM media
-        WHERE title LIKE ? COLLATE NOCASE
-           OR series_title LIKE ? COLLATE NOCASE
-           OR episode_title LIKE ? COLLATE NOCASE
+        WHERE source IN (SELECT source FROM matches)
+           OR (media_type = 'movie' AND (
+               (tmdb_id > 0 AND tmdb_id IN (
+                   SELECT tmdb_id FROM matches WHERE media_type = 'movie' AND tmdb_id > 0
+               ))
+               OR (tmdb_id <= 0 AND EXISTS (
+                   SELECT 1 FROM matches m
+                   WHERE m.media_type = 'movie' AND m.tmdb_id <= 0
+                     AND m.title = media.title COLLATE NOCASE
+                     AND m.release_date = media.release_date
+               ))
+           ))
         ORDER BY CASE WHEN media_type = 'episode'
                       THEN COALESCE(NULLIF(series_title, ''), title)
                       ELSE title END COLLATE NOCASE,
@@ -313,6 +332,61 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             {QStringLiteral("episodeTitle"), query.value(21).toString()},
             {QStringLiteral("stillUrl"), query.value(22).toString()},
         };
+
+        if (query.value(16).toString() == QLatin1String("movie")) {
+            const int tmdbId = query.value(13).toInt();
+            const QString movieTitle = query.value(1).toString().trimmed();
+            const QString releaseDate = query.value(12).toString().trimmed();
+            QString key;
+            if (tmdbId > 0) {
+                key = QStringLiteral("tmdb:%1").arg(tmdbId);
+            } else if (!movieTitle.isEmpty() && releaseDate.size() >= 4) {
+                key = QStringLiteral("title:%1:%2")
+                          .arg(movieTitle.toCaseFolded(), releaseDate.left(4));
+            } else {
+                key = QStringLiteral("source:%1").arg(stored);
+            }
+
+            QString sourceLabel = source.fileName(QUrl::FullyDecoded);
+            if (sourceLabel.isEmpty()) sourceLabel = movieTitle;
+            if (query.value(9).toInt() > 0) {
+                sourceLabel = QStringLiteral("%1p · %2")
+                                  .arg(query.value(9).toInt())
+                                  .arg(sourceLabel);
+            }
+            const QVariantMap movieSource{
+                {QStringLiteral("source"), source},
+                {QStringLiteral("label"), sourceLabel},
+                {QStringLiteral("title"), movieTitle},
+                {QStringLiteral("formatName"), query.value(2).toString()},
+                {QStringLiteral("durationMs"), query.value(3).toLongLong()},
+                {QStringLiteral("positionMs"), query.value(4).toLongLong()},
+                {QStringLiteral("lastOpenedMs"), query.value(7).toLongLong()},
+                {QStringLiteral("width"), query.value(8).toInt()},
+                {QStringLiteral("height"), query.value(9).toInt()},
+                {QStringLiteral("bitrate"), query.value(23).toLongLong()},
+                {QStringLiteral("favorite"), query.value(6).toBool()},
+            };
+
+            const auto existing = movieIndices.constFind(key);
+            if (existing == movieIndices.cend()) {
+                item[QStringLiteral("sources")] = QVariantList{movieSource};
+                item[QStringLiteral("sourceCount")] = 1;
+                item[QStringLiteral("favoriteSource")] = source;
+                movieIndices.insert(key, result.size());
+                result.append(item);
+            } else {
+                QVariantMap movie = result.at(existing.value()).toMap();
+                QVariantList sources = movie.value(QStringLiteral("sources")).toList();
+                sources.append(movieSource);
+                movie[QStringLiteral("sources")] = sources;
+                movie[QStringLiteral("sourceCount")] = sources.size();
+                movie[QStringLiteral("favorite")] = movie.value(QStringLiteral("favorite")).toBool()
+                                                     || query.value(6).toBool();
+                result[existing.value()] = movie;
+            }
+            continue;
+        }
 
         if (query.value(16).toString() != QLatin1String("episode")) {
             result.append(item);
@@ -426,6 +500,53 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
         }
         result[index] = series;
     }
+    for (auto it = movieIndices.cbegin(); it != movieIndices.cend(); ++it) {
+        const int index = it.value();
+        QVariantMap movie = result.at(index).toMap();
+        QVariantList sources = movie.value(QStringLiteral("sources")).toList();
+        std::stable_sort(sources.begin(), sources.end(), [](const QVariant &left, const QVariant &right) {
+            const QVariantMap leftSource = left.toMap();
+            const QVariantMap rightSource = right.toMap();
+            if (leftSource.value(QStringLiteral("height")).toInt()
+                != rightSource.value(QStringLiteral("height")).toInt()) {
+                return leftSource.value(QStringLiteral("height")).toInt()
+                       > rightSource.value(QStringLiteral("height")).toInt();
+            }
+            if (leftSource.value(QStringLiteral("bitrate")).toLongLong()
+                != rightSource.value(QStringLiteral("bitrate")).toLongLong()) {
+                return leftSource.value(QStringLiteral("bitrate")).toLongLong()
+                       > rightSource.value(QStringLiteral("bitrate")).toLongLong();
+            }
+            return leftSource.value(QStringLiteral("label")).toString()
+                   < rightSource.value(QStringLiteral("label")).toString();
+        });
+
+        QVariantMap preferred = sources.isEmpty() ? QVariantMap{} : sources.first().toMap();
+        for (const QVariant &candidateValue : sources) {
+            const QVariantMap candidate = candidateValue.toMap();
+            if (candidate.value(QStringLiteral("positionMs")).toLongLong() > 0
+                && (preferred.value(QStringLiteral("positionMs")).toLongLong() <= 0
+                    || candidate.value(QStringLiteral("lastOpenedMs")).toLongLong()
+                           > preferred.value(QStringLiteral("lastOpenedMs")).toLongLong())) {
+                preferred = candidate;
+            }
+        }
+
+        movie[QStringLiteral("sources")] = sources;
+        movie[QStringLiteral("sourceCount")] = sources.size();
+        if (!preferred.isEmpty()) {
+            movie[QStringLiteral("source")] = preferred.value(QStringLiteral("source"));
+            movie[QStringLiteral("favoriteSource")] = preferred.value(QStringLiteral("source"));
+            movie[QStringLiteral("formatName")] = preferred.value(QStringLiteral("formatName"));
+            movie[QStringLiteral("durationMs")] = preferred.value(QStringLiteral("durationMs"));
+            movie[QStringLiteral("positionMs")] = preferred.value(QStringLiteral("positionMs"));
+            movie[QStringLiteral("lastOpenedMs")] = preferred.value(QStringLiteral("lastOpenedMs"));
+            movie[QStringLiteral("width")] = preferred.value(QStringLiteral("width"));
+            movie[QStringLiteral("height")] = preferred.value(QStringLiteral("height"));
+        }
+        result[index] = movie;
+    }
+
     return result;
 }
 
@@ -461,7 +582,19 @@ bool MediaLibrary::setFavorite(const QUrl &source, bool favorite)
     if (!database_.isOpen() || !source.isValid()) {
         return false;
     }
+    QSqlQuery lookup(database_);
+    lookup.prepare(QStringLiteral("SELECT media_type, tmdb_id FROM media WHERE source = ?"));
+    lookup.addBindValue(sourceKey(source));
+    if (!lookup.exec() || !lookup.next()) return false;
+
     QSqlQuery query(database_);
+    if (lookup.value(0).toString() == QLatin1String("movie") && lookup.value(1).toInt() > 0) {
+        query.prepare(QStringLiteral(
+            "UPDATE media SET favorite = ? WHERE media_type = 'movie' AND tmdb_id = ?"));
+        query.addBindValue(favorite ? 1 : 0);
+        query.addBindValue(lookup.value(1).toInt());
+        return query.exec() && query.numRowsAffected() > 0;
+    }
     query.prepare(QStringLiteral("UPDATE media SET favorite = ? WHERE source = ?"));
     query.addBindValue(favorite ? 1 : 0);
     query.addBindValue(sourceKey(source));

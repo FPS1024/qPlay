@@ -10,9 +10,13 @@ Item {
     property int imageCacheRevision: engine ? engine.imageCacheRevision : 0
     property var selectedEpisode: null
     property var selectedSeason: null
+    property var selectedMovieSource: null
     property int episodePageIndex: 0
     property real contentSideMargin: Math.max(36, width * 0.075)
     readonly property bool isSeries: media && media.mediaType === "series"
+    readonly property bool isMovie: media && media.mediaType === "movie"
+    readonly property var activeSourceInfo: isMovie && selectedMovieSource
+                                           ? selectedMovieSource : media
 
     readonly property var episodePages: buildEpisodePages()
     readonly property var visibleEpisodes: selectedSeason && selectedSeason.episodes
@@ -57,10 +61,33 @@ Item {
         selectedEpisode = episodeForSeason(season)
     }
 
+    function selectedMovieMedia() {
+        if (!root.media || !root.selectedMovieSource)
+            return root.media
+        const playable = Object.assign({}, root.media)
+        playable.source = root.selectedMovieSource.source
+        playable.positionMs = root.selectedMovieSource.positionMs
+        playable.durationMs = root.selectedMovieSource.durationMs
+        playable.formatName = root.selectedMovieSource.formatName
+        playable.width = root.selectedMovieSource.width
+        playable.height = root.selectedMovieSource.height
+        return playable
+    }
+
     onMediaChanged: {
         selectedSeason = null
         selectedEpisode = null
+        selectedMovieSource = null
         episodePageIndex = 0
+        if (media && media.mediaType === "movie" && media.sources && media.sources.length > 0) {
+            selectedMovieSource = media.sources[0]
+            for (let i = 0; i < media.sources.length; ++i) {
+                if (media.sources[i].source.toString() === media.source.toString()) {
+                    selectedMovieSource = media.sources[i]
+                    break
+                }
+            }
+        }
         if (!media || !media.seasons || media.seasons.length === 0)
             return
 
@@ -252,6 +279,94 @@ Item {
                             }
                         }
                     }
+
+                    Text {
+                        visible: root.isMovie && root.media.sources && root.media.sources.length > 1
+                        Layout.fillWidth: true
+                        text: "播放源（" + (root.media && root.media.sourceCount
+                                              ? root.media.sourceCount : 0) + "）"
+                        color: "#d4d4d4"
+                        font.pixelSize: 13
+                        font.weight: Font.DemiBold
+                    }
+
+                    ComboBox {
+                        id: movieSourcePicker
+                        visible: root.isMovie && root.media.sources && root.media.sources.length > 1
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 44
+                        model: root.media && root.media.sources ? root.media.sources : []
+                        textRole: "label"
+                        currentIndex: {
+                            if (!root.selectedMovieSource || !root.media || !root.media.sources) return 0
+                            for (let i = 0; i < root.media.sources.length; ++i) {
+                                if (root.media.sources[i].source.toString()
+                                        === root.selectedMovieSource.source.toString())
+                                    return i
+                            }
+                            return 0
+                        }
+                        onActivated: function(index) {
+                            root.selectedMovieSource = root.media.sources[index]
+                        }
+
+                        contentItem: Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 36
+                            text: movieSourcePicker.displayText
+                            color: "#f5f5f1"
+                            font.pixelSize: 12
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideMiddle
+                        }
+                        indicator: Text {
+                            x: movieSourcePicker.width - width - 12
+                            y: (movieSourcePicker.height - height) / 2
+                            text: "⌄"
+                            color: "#d4d4d4"
+                            font.pixelSize: 20
+                        }
+                        background: Rectangle {
+                            radius: 4
+                            color: movieSourcePicker.pressed ? "#292929" : "#191919"
+                            border.width: 1
+                            border.color: movieSourcePicker.activeFocus ? "#e50914" : "#4a4a4a"
+                        }
+                        delegate: ItemDelegate {
+                            width: movieSourcePicker.width
+                            height: 46
+                            highlighted: movieSourcePicker.highlightedIndex === index
+                            contentItem: Text {
+                                text: movieSourcePicker.textAt(index)
+                                color: "#f5f5f1"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                                elide: Text.ElideMiddle
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted ? "#3a3a3a" : "#1d1d1d"
+                            }
+                        }
+                        popup: Popup {
+                            y: movieSourcePicker.height - 1
+                            width: movieSourcePicker.width
+                            implicitHeight: Math.min(contentItem.implicitHeight, 320)
+                            padding: 1
+                            contentItem: ListView {
+                                clip: true
+                                implicitHeight: contentHeight
+                                model: movieSourcePicker.popup.visible
+                                       ? movieSourcePicker.delegateModel : null
+                                currentIndex: movieSourcePicker.highlightedIndex
+                            }
+                            background: Rectangle {
+                                radius: 4
+                                color: "#191919"
+                                border.color: "#4a4a4a"
+                            }
+                        }
+                    }
                 }
 
                 ColumnLayout {
@@ -296,16 +411,16 @@ Item {
                             font.pixelSize: 14
                         }
                         Text {
-                            visible: root.media && root.media.durationMs > 0
-                            text: root.media && root.media.durationMs > 0 && root.engine
-                                  ? root.engine.formatTime(root.media.durationMs) : ""
+                            visible: root.activeSourceInfo && root.activeSourceInfo.durationMs > 0
+                            text: root.activeSourceInfo && root.activeSourceInfo.durationMs > 0 && root.engine
+                                  ? root.engine.formatTime(root.activeSourceInfo.durationMs) : ""
                             color: "#d4d4d4"
                             font.pixelSize: 14
                         }
                         Text {
-                            visible: root.media && root.media.width > 0
-                            text: root.media && root.media.width > 0
-                                  ? root.media.width + " × " + root.media.height : ""
+                            visible: root.activeSourceInfo && root.activeSourceInfo.width > 0
+                            text: root.activeSourceInfo && root.activeSourceInfo.width > 0
+                                  ? root.activeSourceInfo.width + " × " + root.activeSourceInfo.height : ""
                             color: "#d4d4d4"
                             font.pixelSize: 14
                         }
@@ -360,8 +475,12 @@ Item {
                                   ? (root.selectedEpisode && root.selectedEpisode.positionMs > 0
                                      ? "▶  继续播放第 " + root.selectedEpisode.episodeNumber + " 集"
                                      : "▶  播放当前集")
-                                  : (root.media && root.media.positionMs > 0 ? "▶  继续播放" : "▶  播放")
-                            onClicked: root.playRequested(root.selectedEpisode || root.media)
+                                  : (root.activeSourceInfo && root.activeSourceInfo.positionMs > 0
+                                     ? "▶  继续播放" : "▶  播放")
+                            onClicked: root.playRequested(root.selectedEpisode
+                                                          || (root.isMovie
+                                                              ? root.selectedMovieMedia()
+                                                              : root.media))
                             contentItem: Text {
                                 text: playButton.text
                                 color: "#111111"
