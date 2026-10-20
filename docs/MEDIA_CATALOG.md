@@ -24,6 +24,19 @@ credential-free WebDAV playback URL as the unique `source` key.
 | `episode_title` | Episode title; empty for movies. |
 | `still_url` | TMDB episode still image URL; empty when no still is available. |
 
+Genres belong to a logical work rather than to an individual media file. They
+are stored in the `work_genres` table, keyed by `work_type` (`movie` or `tv`),
+TMDB work ID, and TMDB genre ID. `genre_name` stores the localized display name.
+All copies of a movie share the movie's genre assignments. Episode rows use the
+series TMDB ID and map to `work_type='tv'`, so the entire show shares one set of
+genres. A work can have multiple genre rows.
+
+`genre_bindings` stores optional qPlay display terms for each TMDB genre, keyed
+by work type and genre ID. The source name in `work_genres` remains unchanged;
+an empty display term falls back to that source name. qPlay exposes both the
+bound `name` and original `sourceName` to QML, so one display term can group
+multiple source genres without rewriting scraped metadata.
+
 The table also contains qPlay-owned playback state and technical fields:
 `position_ms`, `play_count`, `favorite`, `last_opened_ms`, `duration_ms`,
 `format_name`, `bitrate`, `width`, and `height`. The scraper must preserve
@@ -42,3 +55,11 @@ changes on startup, groups episode rows by TMDB series ID, and exposes seasons
 and paged episode cards separately on the details page. Each card can show its
 TMDB still image, episode number, title, and synopsis. Restart qPlay after a
 scraper run to refresh the poster wall.
+
+The scraper import format accepts either the legacy media-record array or an
+object containing `media` and `works` arrays. `media` still has one record per
+video file. `works` has one record per matched movie or TV series, with
+`work_type`, `tmdb_id`, and a `genres` array of `{id, name}` objects. Genre
+assignments and media metadata are committed in the same transaction. Omitting
+`works` leaves existing genre assignments untouched; including a work with an
+empty `genres` array clears that work's TMDB genre assignments.

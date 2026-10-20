@@ -16,7 +16,7 @@ ApplicationWindow {
     color: "#080808"
     title: player.title.length > 0 && page === 2 ? player.title + " - qPlay" : "qPlay"
 
-    property int page: 0 // 0: browse, 1: details, 2: playback
+    property int page: 0 // 0: browse, 1: details, 2: playback, 3: settings
     property bool controlsVisible: true
     property var selectedMedia: ({})
     property string playbackHeaderTitle: ""
@@ -55,6 +55,8 @@ ApplicationWindow {
             player.pause()
             page = 1
         } else if (page === 1) {
+            page = 0
+        } else if (page === 3) {
             page = 0
         }
     }
@@ -188,11 +190,20 @@ ApplicationWindow {
                 }
 
                 Text {
+                    visible: window.page !== 1
                     text: "qPlay"
                     color: "#e50914"
                     font.pixelSize: 27
                     font.weight: Font.Black
                     font.letterSpacing: 0.4
+                }
+
+                Text {
+                    visible: window.page === 3
+                    text: "设置"
+                    color: "#eeeeee"
+                    font.pixelSize: 17
+                    font.weight: Font.DemiBold
                 }
 
                 RowLayout {
@@ -266,6 +277,33 @@ ApplicationWindow {
                     }
                 }
 
+                ToolButton {
+                    id: settingsButton
+                    visible: window.page === 0
+                    Layout.preferredWidth: 38
+                    Layout.preferredHeight: 38
+                    text: "⚙"
+                    hoverEnabled: true
+                    onClicked: window.page = 3
+
+                    contentItem: Text {
+                        text: settingsButton.text
+                        color: settingsButton.hovered ? "#ffffff" : "#b8b8b8"
+                        font.pixelSize: 20
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        radius: 5
+                        color: settingsButton.hovered ? "#202020" : "transparent"
+                    }
+
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: "设置"
+                }
+
             }
         }
 
@@ -278,6 +316,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 visible: window.page === 0
                 engine: player
+                homeLayout: player.homeLayout
                 onDetailsRequested: function(media) {
                     window.selectedMedia = media
                     window.page = 1
@@ -291,6 +330,12 @@ ApplicationWindow {
                 engine: player
                 onBackRequested: window.page = 0
                 onPlayRequested: function(media) { window.playSelected(media) }
+            }
+
+            SettingsPage {
+                anchors.fill: parent
+                visible: window.page === 3
+                engine: player
             }
 
             Item {

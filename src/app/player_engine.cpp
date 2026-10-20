@@ -77,6 +77,10 @@ PlayerEngine::PlayerEngine(QObject *parent)
     }
     webDavUsername_ = settings.value(QStringLiteral("webdav/username")).toString();
     webDavPassword_ = settings.value(QStringLiteral("webdav/password")).toString();
+    homeLayout_ = settings.value(QStringLiteral("home/layout"), QStringLiteral("genreRows")).toString();
+    if (homeLayout_ != QLatin1String("posterWall") && homeLayout_ != QLatin1String("genreRows"))
+        homeLayout_ = QStringLiteral("genreRows");
+    lastFeaturedKey_ = settings.value(QStringLiteral("home/lastFeaturedKey")).toString();
     if (settings.value(QStringLiteral("tmdb/apiKey")).toString().isEmpty()) {
         const QList<QPair<QString, QString>> legacySettingsIds{
             {QStringLiteral("qPlay"), QStringLiteral("qPlay")},
@@ -100,9 +104,8 @@ PlayerEngine::PlayerEngine(QObject *parent)
     }
 
     QString libraryError;
-    if (!library_.initialize(&libraryError)) {
+    if (!library_.initialize(&libraryError))
         setStatusMessage(tr("Media library is unavailable: %1").arg(libraryError));
-    }
 
     connect(session_, &QuarkTV::Mpv::MpvSession::mediaOpened,
             this, &PlayerEngine::handleMediaOpened);
@@ -575,6 +578,20 @@ QVariantList PlayerEngine::libraryMedia(const QString &filter) const
     return library_.libraryMedia(filter);
 }
 
+QVariantList PlayerEngine::genreBindings() const
+{
+    return library_.genreBindings();
+}
+
+bool PlayerEngine::setGenreBinding(const QString &workType, int genreId, const QString &displayName)
+{
+    const bool saved = library_.setGenreBinding(workType, genreId, displayName);
+    if (saved) {
+        emit libraryChanged();
+    }
+    return saved;
+}
+
 QUrl PlayerEngine::cachedImageSource(const QString &remoteUrl, const QString &kind)
 {
     const QString category = kind == QLatin1String("background")
@@ -679,6 +696,30 @@ void PlayerEngine::setWebDavPassword(const QString &password)
     emit webDavSettingsChanged();
 }
 
+QString PlayerEngine::homeLayout() const { return homeLayout_; }
+void PlayerEngine::setHomeLayout(const QString &layout)
+{
+    if (layout != QLatin1String("posterWall") && layout != QLatin1String("genreRows"))
+        return;
+    if (homeLayout_ == layout) return;
+    homeLayout_ = layout;
+    QSettings settings = userConfig();
+    settings.setValue(QStringLiteral("home/layout"), homeLayout_);
+    secureUserConfig(settings);
+    emit homeLayoutChanged();
+}
+
+QString PlayerEngine::lastFeaturedKey() const { return lastFeaturedKey_; }
+void PlayerEngine::setLastFeaturedKey(const QString &key)
+{
+    if (lastFeaturedKey_ == key) return;
+    lastFeaturedKey_ = key;
+    QSettings settings = userConfig();
+    settings.setValue(QStringLiteral("home/lastFeaturedKey"), lastFeaturedKey_);
+    secureUserConfig(settings);
+    emit lastFeaturedKeyChanged();
+}
+
 bool PlayerEngine::setFavorite(const QUrl &source, bool favorite)
 {
     const bool changed = library_.setFavorite(source, favorite);
@@ -691,7 +732,9 @@ bool PlayerEngine::setFavorite(const QUrl &source, bool favorite)
 bool PlayerEngine::markWatched(const QUrl &source)
 {
     const bool changed = library_.markWatched(source);
-    if (changed) emit libraryChanged();
+    if (changed) {
+        emit libraryChanged();
+    }
     return changed;
 }
 
@@ -833,7 +876,9 @@ void PlayerEngine::saveProgress(bool resetAtEnd, bool notifyLibrary)
     }
     if (library_.updateProgress(source_, positionToSave, durationMs_)) {
         lastSavedPositionMs_ = positionToSave;
-        if (notifyLibrary) emit libraryChanged();
+        if (notifyLibrary) {
+            emit libraryChanged();
+        }
     }
 }
 

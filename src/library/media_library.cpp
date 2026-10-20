@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSet>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -50,9 +51,7 @@ MediaLibrary::MediaLibrary(QObject *parent)
 
 MediaLibrary::~MediaLibrary()
 {
-    if (database_.isValid()) {
-        database_.close();
-    }
+    if (database_.isValid()) database_.close();
     database_ = {};
     QSqlDatabase::removeDatabase(connectionName_);
 }
@@ -176,6 +175,21 @@ bool MediaLibrary::initialize(QString *error)
             ON media(last_opened_ms DESC);
         CREATE INDEX IF NOT EXISTS media_favorite_idx
             ON media(favorite, title);
+        CREATE TABLE IF NOT EXISTS work_genres (
+            work_type TEXT NOT NULL CHECK (work_type IN ('movie', 'tv')),
+            tmdb_id INTEGER NOT NULL CHECK (tmdb_id > 0),
+            genre_id INTEGER NOT NULL CHECK (genre_id > 0),
+            genre_name TEXT NOT NULL,
+            PRIMARY KEY (work_type, tmdb_id, genre_id)
+        );
+        CREATE INDEX IF NOT EXISTS work_genres_genre_idx
+            ON work_genres(genre_id, work_type, tmdb_id);
+        CREATE TABLE IF NOT EXISTS genre_bindings (
+            work_type TEXT NOT NULL CHECK (work_type IN ('movie', 'tv')),
+            genre_id INTEGER NOT NULL CHECK (genre_id > 0),
+            display_name TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (work_type, genre_id)
+        );
     )");
 
     for (const QString &statement : schema.split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
@@ -263,6 +277,28 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
     if (!database_.isOpen()) return result;
     QHash<QString, int> seriesIndices;
     QHash<QString, int> movieIndices;
+    QHash<QString, QVariantList> genresByWork;
+    QHash<QString, QSet<QString>> genreNamesByWork;
+    QSqlQuery genreQuery(database_);
+    if (genreQuery.exec(QStringLiteral(
+            "SELECT g.work_type, g.tmdb_id, g.genre_id, g.genre_name, "
+            "COALESCE(NULLIF(b.display_name, ''), g.genre_name) "
+            "FROM work_genres g LEFT JOIN genre_bindings b "
+            "ON b.work_type = g.work_type AND b.genre_id = g.genre_id "
+            "ORDER BY COALESCE(NULLIF(b.display_name, ''), g.genre_name) COLLATE NOCASE"))) {
+        while (genreQuery.next()) {
+            const QString key = genreQuery.value(0).toString() + QLatin1Char(':')
+                                + QString::number(genreQuery.value(1).toInt());
+            const QString displayName = genreQuery.value(4).toString();
+            if (genreNamesByWork[key].contains(displayName)) continue;
+            genreNamesByWork[key].insert(displayName);
+            genresByWork[key].append(QVariantMap{
+                {QStringLiteral("id"), genreQuery.value(2).toInt()},
+                {QStringLiteral("name"), displayName},
+                {QStringLiteral("sourceName"), genreQuery.value(3).toString()},
+            });
+        }
+    }
     QSqlQuery query(database_);
     query.prepare(QStringLiteral(R"(
         WITH matches AS (
@@ -307,6 +343,13 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
         const QUrl source = !stored.contains(QStringLiteral("://"))
                                 ? QUrl::fromLocalFile(stored)
                                 : QUrl::fromUserInput(stored);
+        const QString mediaType = query.value(16).toString();
+        const int tmdbId = query.value(13).toInt();
+        const QString workType = mediaType == QLatin1String("movie")
+                                     ? QStringLiteral("movie")
+                                     : mediaType == QLatin1String("episode")
+                                           ? QStringLiteral("tv") : QString();
+        const QString genreKey = workType + QLatin1Char(':') + QString::number(tmdbId);
         QVariantMap item{
             {QStringLiteral("source"), source},
             {QStringLiteral("title"), query.value(1).toString()},
@@ -322,9 +365,10 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             {QStringLiteral("overview"), query.value(11).toString()},
             {QStringLiteral("releaseDate"), query.value(12).toString()},
             {QStringLiteral("tmdbId"), query.value(13).toInt()},
+            {QStringLiteral("genres"), tmdbId > 0 ? genresByWork.value(genreKey) : QVariantList{}},
             {QStringLiteral("backdropUrl"), query.value(14).toString()},
             {QStringLiteral("rating"), query.value(15).toDouble()},
-            {QStringLiteral("mediaType"), query.value(16).toString()},
+            {QStringLiteral("mediaType"), mediaType},
             {QStringLiteral("seriesTitle"), query.value(17).toString()},
             {QStringLiteral("seasonNumber"), query.value(18).toInt()},
             {QStringLiteral("seasonName"), query.value(19).toString()},
@@ -381,6 +425,11 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
                 sources.append(movieSource);
                 movie[QStringLiteral("sources")] = sources;
                 movie[QStringLiteral("sourceCount")] = sources.size();
+                movie[QStringLiteral("playCount")] = movie.value(QStringLiteral("playCount")).toInt()
+                                                     + query.value(5).toInt();
+                movie[QStringLiteral("lastOpenedMs")] = qMax(
+                    movie.value(QStringLiteral("lastOpenedMs")).toLongLong(),
+                    query.value(7).toLongLong());
                 movie[QStringLiteral("favorite")] = movie.value(QStringLiteral("favorite")).toBool()
                                                      || query.value(6).toBool();
                 result[existing.value()] = movie;
@@ -396,7 +445,6 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
         const QString seriesTitle = query.value(17).toString().trimmed().isEmpty()
                                         ? query.value(1).toString().trimmed()
                                         : query.value(17).toString().trimmed();
-        const int tmdbId = query.value(13).toInt();
         const QString key = tmdbId > 0
                                 ? QStringLiteral("tmdb:%1").arg(tmdbId)
                                 : QStringLiteral("title:%1").arg(seriesTitle.toCaseFolded());
@@ -425,6 +473,7 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             {QStringLiteral("episodeNumber"), episodeNumber},
             {QStringLiteral("positionMs"), query.value(4).toLongLong()},
             {QStringLiteral("durationMs"), query.value(3).toLongLong()},
+            {QStringLiteral("playCount"), query.value(5).toInt()},
             {QStringLiteral("lastOpenedMs"), query.value(7).toLongLong()},
             {QStringLiteral("favorite"), query.value(6).toBool()},
         };
@@ -456,6 +505,13 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
 
         const int index = existing.value();
         QVariantMap series = result.at(index).toMap();
+        series[QStringLiteral("favorite")] = series.value(QStringLiteral("favorite")).toBool()
+                                             || query.value(6).toBool();
+        series[QStringLiteral("playCount")] = series.value(QStringLiteral("playCount")).toInt()
+                                              + query.value(5).toInt();
+        series[QStringLiteral("lastOpenedMs")] = qMax(
+            series.value(QStringLiteral("lastOpenedMs")).toLongLong(),
+            query.value(7).toLongLong());
         QVariantList episodes = series.value(QStringLiteral("episodes")).toList();
         episodes.append(episode);
         series[QStringLiteral("episodes")] = episodes;
@@ -496,7 +552,6 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             series[QStringLiteral("source")] = source;
             series[QStringLiteral("positionMs")] = query.value(4).toLongLong();
             series[QStringLiteral("durationMs")] = query.value(3).toLongLong();
-            series[QStringLiteral("lastOpenedMs")] = query.value(7).toLongLong();
         }
         result[index] = series;
     }
@@ -540,7 +595,6 @@ QVariantList MediaLibrary::libraryMedia(const QString &filter, int limit) const
             movie[QStringLiteral("formatName")] = preferred.value(QStringLiteral("formatName"));
             movie[QStringLiteral("durationMs")] = preferred.value(QStringLiteral("durationMs"));
             movie[QStringLiteral("positionMs")] = preferred.value(QStringLiteral("positionMs"));
-            movie[QStringLiteral("lastOpenedMs")] = preferred.value(QStringLiteral("lastOpenedMs"));
             movie[QStringLiteral("width")] = preferred.value(QStringLiteral("width"));
             movie[QStringLiteral("height")] = preferred.value(QStringLiteral("height"));
         }
@@ -736,6 +790,56 @@ QVariantList MediaLibrary::favoriteMedia(int limit) const
         });
     }
     return result;
+}
+
+QVariantList MediaLibrary::genreBindings() const
+{
+    QVariantList result;
+    if (!database_.isOpen()) return result;
+
+    QSqlQuery query(database_);
+    if (!query.exec(QStringLiteral(R"(
+        SELECT g.work_type, g.genre_id, MIN(g.genre_name),
+               COALESCE(NULLIF(b.display_name, ''), MIN(g.genre_name)),
+               COUNT(DISTINCT g.tmdb_id)
+        FROM work_genres g
+        LEFT JOIN genre_bindings b
+          ON b.work_type = g.work_type AND b.genre_id = g.genre_id
+        GROUP BY g.work_type, g.genre_id
+        ORDER BY g.work_type, MIN(g.genre_name) COLLATE NOCASE
+    )"))) {
+        return result;
+    }
+
+    while (query.next()) {
+        result.append(QVariantMap{
+            {QStringLiteral("workType"), query.value(0).toString()},
+            {QStringLiteral("genreId"), query.value(1).toInt()},
+            {QStringLiteral("sourceName"), query.value(2).toString()},
+            {QStringLiteral("displayName"), query.value(3).toString()},
+            {QStringLiteral("workCount"), query.value(4).toInt()},
+        });
+    }
+    return result;
+}
+
+bool MediaLibrary::setGenreBinding(const QString &workType, int genreId, const QString &displayName)
+{
+    if (!database_.isOpen() || (workType != QLatin1String("movie") && workType != QLatin1String("tv"))
+        || genreId <= 0) {
+        return false;
+    }
+
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(R"(
+        INSERT INTO genre_bindings (work_type, genre_id, display_name)
+        VALUES (?, ?, ?)
+        ON CONFLICT(work_type, genre_id) DO UPDATE SET display_name = excluded.display_name
+    )"));
+    query.addBindValue(workType);
+    query.addBindValue(genreId);
+    query.addBindValue(displayName.trimmed());
+    return query.exec();
 }
 
 qint64 MediaLibrary::resumePosition(const QUrl &source) const

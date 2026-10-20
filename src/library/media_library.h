@@ -30,6 +30,8 @@ public:
     [[nodiscard]] QVariantList recentMedia(int limit = 50) const;
     [[nodiscard]] QVariantList libraryMedia(const QString &filter = {}, int limit = 5000) const;
     [[nodiscard]] QVariantList favoriteMedia(int limit = 100) const;
+    [[nodiscard]] QVariantList genreBindings() const;
+    bool setGenreBinding(const QString &workType, int genreId, const QString &displayName);
     [[nodiscard]] qint64 resumePosition(const QUrl &source) const;
 
 private:

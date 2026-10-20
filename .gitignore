@@ -35,3 +35,6 @@ qPlay.user.ini
 *.user
 *.autosave
 compile_commands.json
+
+# Developer
+build.sh

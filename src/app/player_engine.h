@@ -37,6 +37,8 @@ class PlayerEngine final : public QObject
     Q_PROPERTY(QString webDavUrl READ webDavUrl WRITE setWebDavUrl NOTIFY webDavSettingsChanged)
     Q_PROPERTY(QString webDavUsername READ webDavUsername WRITE setWebDavUsername NOTIFY webDavSettingsChanged)
     Q_PROPERTY(QString webDavPassword READ webDavPassword WRITE setWebDavPassword NOTIFY webDavSettingsChanged)
+    Q_PROPERTY(QString homeLayout READ homeLayout WRITE setHomeLayout NOTIFY homeLayoutChanged)
+    Q_PROPERTY(QString lastFeaturedKey READ lastFeaturedKey WRITE setLastFeaturedKey NOTIFY lastFeaturedKeyChanged)
     Q_PROPERTY(QVariantList videoTracks READ videoTracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList audioTracks READ audioTracks NOTIFY tracksChanged)
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY tracksChanged)
@@ -77,6 +79,10 @@ public:
     void setWebDavUsername(const QString &username);
     [[nodiscard]] QString webDavPassword() const;
     void setWebDavPassword(const QString &password);
+    [[nodiscard]] QString homeLayout() const;
+    void setHomeLayout(const QString &layout);
+    [[nodiscard]] QString lastFeaturedKey() const;
+    void setLastFeaturedKey(const QString &key);
     [[nodiscard]] QVariantList videoTracks() const;
     [[nodiscard]] QVariantList audioTracks() const;
     [[nodiscard]] QVariantList subtitleTracks() const;
@@ -108,6 +114,8 @@ public:
     Q_INVOKABLE void previous();
     Q_INVOKABLE QVariantList recentMedia(int limit = 50) const;
     Q_INVOKABLE QVariantList libraryMedia(const QString &filter = {}) const;
+    Q_INVOKABLE QVariantList genreBindings() const;
+    Q_INVOKABLE bool setGenreBinding(const QString &workType, int genreId, const QString &displayName);
     Q_INVOKABLE QUrl cachedImageSource(const QString &remoteUrl, const QString &kind);
     Q_INVOKABLE bool setFavorite(const QUrl &source, bool favorite);
     Q_INVOKABLE bool markWatched(const QUrl &source);
@@ -135,6 +143,8 @@ signals:
     void playlistChanged();
     void libraryChanged();
     void webDavSettingsChanged();
+    void homeLayoutChanged();
+    void lastFeaturedKeyChanged();
     void imageCacheChanged();
 
 private:
@@ -156,6 +166,8 @@ private:
     QString webDavUrl_;
     QString webDavUsername_;
     QString webDavPassword_;
+    QString homeLayout_ = QStringLiteral("genreRows");
+    QString lastFeaturedKey_;
     QTimer progressTimer_;
     MediaInfo mediaInfo_;
     PlaybackState playbackState_ = PlaybackState::Stopped;

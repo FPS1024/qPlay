@@ -9,9 +9,15 @@ Item {
     property var entries: []
     property string filterText: ""
     property string catalogSection: "home"
+    property string homeLayout: "genreRows"
     property var continueEntries: []
-    property var featured: entries.length > 0 ? entries[0] : null
+    property var genreSections: []
+    property var featured: null
+    property bool featuredInitialized: false
     property int imageCacheRevision: engine ? engine.imageCacheRevision : 0
+    readonly property int railControlWidth: 58
+    readonly property real railControlHeight: 172 * 1.43
+    readonly property real railStep: 172 + 14
 
     function imageSource(url, kind) {
         const revision = imageCacheRevision
@@ -28,6 +34,7 @@ Item {
 
     function reload() {
         const catalog = engine ? engine.libraryMedia(filterText) : []
+        initializeFeatured()
         if (catalogSection === "series")
             entries = catalog.filter(function(item) { return item.mediaType === "series" })
         else if (catalogSection === "movies")
@@ -36,12 +43,198 @@ Item {
             entries = catalog.filter(function(item) { return item.favorite })
         else
             entries = catalog
+        if (catalogSection === "home" && filterText.trim().length === 0
+                && homeLayout === "posterWall") {
+            entries = shuffledEntries(entries)
+        }
         continueEntries = entries.filter(function(item) { return item.positionMs > 0 })
                                    .map(function(item) {
             const continueItem = Object.assign({}, item)
             continueItem.inContinueList = true
             return continueItem
         })
+        genreSections = buildGenreSections(entries)
+    }
+
+    function mediaWorkKey(item) {
+        const workType = item.mediaType === "movie" ? "movie" : "tv"
+        const tmdbId = Number(item.tmdbId || 0)
+        if (tmdbId > 0)
+            return workType + ":" + tmdbId
+        const title = (item.seriesTitle || item.title || "").trim().toLocaleLowerCase()
+        const year = workType === "movie" ? (item.releaseDate || "").substring(0, 4) : ""
+        return workType + ":" + title + ":" + year
+    }
+
+    function hasUserActivity(item) {
+        return !!item.favorite || Number(item.playCount || 0) > 0
+                || Number(item.lastOpenedMs || 0) > 0 || Number(item.positionMs || 0) > 0
+    }
+
+    function chooseFeatured(items) {
+        if (items.length === 0)
+            return null
+
+        const activeWorks = Object.create(null)
+        const genreWeights = Object.create(null)
+        let hasActivity = false
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
+            if (!hasUserActivity(item))
+                continue
+
+            hasActivity = true
+            activeWorks[mediaWorkKey(item)] = true
+            const weight = (item.favorite ? 3 : 0)
+                    + (Number(item.playCount || 0) > 0 || Number(item.lastOpenedMs || 0) > 0
+                       || Number(item.positionMs || 0) > 0 ? 1 : 0)
+            const countedGenres = Object.create(null)
+            const genres = item.genres || []
+            for (let j = 0; j < genres.length; ++j) {
+                const genreName = (genres[j].name || genres[j].sourceName || "").trim()
+                if (!genreName)
+                    continue
+                const genreKey = "$" + genreName.toLocaleLowerCase()
+                if (countedGenres[genreKey])
+                    continue
+                countedGenres[genreKey] = true
+                genreWeights[genreKey] = (genreWeights[genreKey] || 0) + weight
+            }
+        }
+
+        let pool = []
+        if (hasActivity) {
+            for (let i = 0; i < items.length; ++i) {
+                const item = items[i]
+                if (activeWorks[mediaWorkKey(item)])
+                    continue
+                let score = 0
+                const countedGenres = Object.create(null)
+                const genres = item.genres || []
+                for (let j = 0; j < genres.length; ++j) {
+                    const genreName = (genres[j].name || genres[j].sourceName || "").trim()
+                    if (!genreName)
+                        continue
+                    const genreKey = "$" + genreName.toLocaleLowerCase()
+                    if (countedGenres[genreKey])
+                        continue
+                    countedGenres[genreKey] = true
+                    score += genreWeights[genreKey] || 0
+                }
+                if (score > 0)
+                    pool.push({ item: item, weight: score })
+            }
+            if (pool.length === 0) {
+                pool = items.filter(function(item) { return !activeWorks[mediaWorkKey(item)] })
+                            .map(function(item) { return { item: item, weight: 1 } })
+            }
+        } else {
+            pool = items.map(function(item) { return { item: item, weight: 1 } })
+        }
+
+        if (pool.length === 0)
+            pool = items.map(function(item) { return { item: item, weight: 1 } })
+
+        // Keep the hero changing between launches, including while category preferences are active.
+        if (engine && pool.length > 1) {
+            const previousKey = engine.lastFeaturedKey
+            const alternatives = pool.filter(function(candidate) {
+                return mediaWorkKey(candidate.item) !== previousKey
+            })
+            if (alternatives.length > 0)
+                pool = alternatives
+            else if (hasActivity) {
+                const unseenAlternatives = items.filter(function(item) {
+                    return !activeWorks[mediaWorkKey(item)] && mediaWorkKey(item) !== previousKey
+                }).map(function(item) { return { item: item, weight: 1 } })
+                if (unseenAlternatives.length > 0)
+                    pool = unseenAlternatives
+            }
+        }
+
+        const totalWeight = pool.reduce(function(total, candidate) { return total + candidate.weight }, 0)
+        let randomWeight = Math.random() * totalWeight
+        for (let i = 0; i < pool.length; ++i) {
+            randomWeight -= pool[i].weight
+            if (randomWeight < 0)
+                return pool[i].item
+        }
+        return pool[pool.length - 1].item
+    }
+
+    function initializeFeatured() {
+        if (featuredInitialized || !engine)
+            return
+        const catalog = engine.libraryMedia()
+        if (!catalog || catalog.length === 0)
+            return
+        featured = chooseFeatured(catalog)
+        if (!featured)
+            return
+        featuredInitialized = true
+        engine.lastFeaturedKey = mediaWorkKey(featured)
+    }
+
+    function shuffledEntries(items) {
+        const result = items.slice()
+        for (let i = result.length - 1; i > 0; --i) {
+            const j = Math.floor(Math.random() * (i + 1))
+            const temporary = result[i]
+            result[i] = result[j]
+            result[j] = temporary
+        }
+        return result
+    }
+
+    function buildGenreSections(items) {
+        if (catalogSection !== "home" || homeLayout !== "genreRows" || filterText.trim().length > 0)
+            return []
+
+        const groups = Object.create(null)
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
+            const workType = item.mediaType === "movie" ? "movie" : "tv"
+            const tmdbId = Number(item.tmdbId || 0)
+            const fallbackTitle = (item.seriesTitle || item.title || "").trim().toLocaleLowerCase()
+            const workKey = workType + ":" + (tmdbId > 0 ? tmdbId : fallbackTitle)
+            const genres = item.genres || []
+
+            for (let j = 0; j < genres.length; ++j) {
+                const genre = genres[j]
+                const title = (genre.name || genre.sourceName || "").trim()
+                if (!title)
+                    continue
+
+                const groupKey = "$" + title.toLocaleLowerCase()
+                if (!groups[groupKey]) {
+                    groups[groupKey] = { title: title, items: [], seen: Object.create(null) }
+                }
+                if (!groups[groupKey].seen[workKey]) {
+                    groups[groupKey].seen[workKey] = true
+                    groups[groupKey].items.push(item)
+                }
+            }
+        }
+
+        const sections = Object.keys(groups).map(function(key) { return groups[key] })
+                                             .filter(function(section) { return section.items.length >= 2 })
+        sections.forEach(function(section) {
+            section.items.sort(function(a, b) {
+                const ratingDifference = Number(b.rating || 0) - Number(a.rating || 0)
+                if (ratingDifference !== 0)
+                    return ratingDifference
+                const playDifference = Number(b.playCount || 0) - Number(a.playCount || 0)
+                if (playDifference !== 0)
+                    return playDifference
+                return (a.seriesTitle || a.title || "").localeCompare(b.seriesTitle || b.title || "", "zh-CN")
+            })
+        })
+        sections.sort(function(a, b) {
+            if (a.items.length !== b.items.length)
+                return b.items.length - a.items.length
+            return a.title.localeCompare(b.title, "zh-CN")
+        })
+        return sections
     }
 
     Component.onCompleted: reload()
@@ -49,6 +242,7 @@ Item {
     Connections {
         target: root.engine
         function onLibraryChanged() { root.reload() }
+        function onHomeLayoutChanged() { root.reload() }
     }
 
     Rectangle {
@@ -72,16 +266,28 @@ Item {
             maximumFlickVelocity: 5000
             boundsBehavior: Flickable.StopAtBounds
 
+            NumberAnimation {
+                id: verticalWheelScroll
+                target: pageFlickable
+                property: "contentY"
+                duration: 120
+                easing.type: Easing.OutCubic
+            }
+
             WheelHandler {
                 target: null
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: function(event) {
                     const delta = event.pixelDelta.y !== 0
-                            ? event.pixelDelta.y
-                            : event.angleDelta.y / 8
+                            ? event.pixelDelta.y * 1.5
+                            : event.angleDelta.y / 120 * 64
                     const maxY = Math.max(0, pageFlickable.contentHeight - pageFlickable.height)
-                    pageFlickable.contentY = Math.max(0, Math.min(maxY,
-                                                                   pageFlickable.contentY - delta * 2))
+                    const pendingY = verticalWheelScroll.running
+                            ? verticalWheelScroll.to : pageFlickable.contentY
+                    verticalWheelScroll.stop()
+                    verticalWheelScroll.from = pageFlickable.contentY
+                    verticalWheelScroll.to = Math.max(0, Math.min(maxY, pendingY - delta))
+                    verticalWheelScroll.start()
                     event.accepted = true
                 }
             }
@@ -213,15 +419,197 @@ Item {
                             font.weight: Font.DemiBold
                         }
 
-                        ListView {
+                        Item {
                             width: parent.width
                             height: 326
-                            orientation: ListView.Horizontal
+
+                            ListView {
+                                id: continueList
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.leftMargin: root.railControlWidth
+                                anchors.rightMargin: root.railControlWidth
+                                orientation: ListView.Horizontal
+                                spacing: 14
+                                clip: true
+                                model: root.continueEntries
+                                delegate: posterCard
+                                boundsBehavior: Flickable.StopAtBounds
+                            }
+
+                            NumberAnimation {
+                                id: continueRailScroll
+                                target: continueList
+                                property: "contentX"
+                                duration: 320
+                                easing.type: Easing.OutCubic
+                            }
+
+                            ToolButton {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                width: root.railControlWidth
+                                height: root.railControlHeight
+                                z: 2
+                                visible: continueList.contentWidth > continueList.width + 1
+                                         && continueList.contentX > 1
+                                enabled: visible
+                                text: "‹"
+                                onClicked: {
+                                    continueRailScroll.stop()
+                                    continueRailScroll.from = continueList.contentX
+                                    continueRailScroll.to = Math.max(0, continueList.contentX - root.railStep)
+                                    continueRailScroll.start()
+                                }
+                                contentItem: Text {
+                                    text: "‹"
+                                    color: "#ffffff"
+                                    font.pixelSize: 46
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    radius: 5
+                                    color: parent.hovered ? "#dd242424" : "#bb111111"
+                                }
+                            }
+
+                            ToolButton {
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                width: root.railControlWidth
+                                height: root.railControlHeight
+                                z: 2
+                                visible: continueList.contentWidth > continueList.width + 1
+                                         && continueList.contentX < continueList.contentWidth - continueList.width - 1
+                                enabled: continueList.contentX < continueList.contentWidth - continueList.width - 1
+                                text: "›"
+                                onClicked: {
+                                    continueRailScroll.stop()
+                                    continueRailScroll.from = continueList.contentX
+                                    continueRailScroll.to = Math.min(continueList.contentWidth - continueList.width,
+                                                                     continueList.contentX + root.railStep)
+                                    continueRailScroll.start()
+                                }
+                                contentItem: Text {
+                                    text: "›"
+                                    color: "#ffffff"
+                                    font.pixelSize: 46
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    radius: 5
+                                    color: parent.hovered ? "#dd242424" : "#bb111111"
+                                }
+                            }
+                        }
+                    }
+
+                    Repeater {
+                        model: root.genreSections
+
+                        delegate: Column {
+                            required property var modelData
+                            width: sectionStack.width
                             spacing: 14
-                            clip: true
-                            model: root.continueEntries
-                            delegate: posterCard
-                            boundsBehavior: Flickable.StopAtBounds
+
+                            Text {
+                                text: modelData.title
+                                color: "#f5f5f1"
+                                font.pixelSize: 21
+                                font.weight: Font.DemiBold
+                            }
+
+                            Item {
+                                width: parent.width
+                                height: 326
+
+                                ListView {
+                                    id: genreList
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.bottom: parent.bottom
+                                    anchors.leftMargin: root.railControlWidth
+                                    anchors.rightMargin: root.railControlWidth
+                                    orientation: ListView.Horizontal
+                                    spacing: 14
+                                    clip: true
+                                    model: modelData.items
+                                    delegate: posterCard
+                                    boundsBehavior: Flickable.StopAtBounds
+                                }
+
+                                NumberAnimation {
+                                    id: genreRailScroll
+                                    target: genreList
+                                    property: "contentX"
+                                    duration: 320
+                                    easing.type: Easing.OutCubic
+                                }
+
+                                ToolButton {
+                                    anchors.left: parent.left
+                                    anchors.top: parent.top
+                                    width: root.railControlWidth
+                                    height: root.railControlHeight
+                                    z: 2
+                                    visible: genreList.contentWidth > genreList.width + 1
+                                             && genreList.contentX > 1
+                                    enabled: visible
+                                    text: "‹"
+                                    onClicked: {
+                                        genreRailScroll.stop()
+                                        genreRailScroll.from = genreList.contentX
+                                        genreRailScroll.to = Math.max(0, genreList.contentX - root.railStep)
+                                        genreRailScroll.start()
+                                    }
+                                    contentItem: Text {
+                                        text: "‹"
+                                        color: "#ffffff"
+                                        font.pixelSize: 46
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    background: Rectangle {
+                                        radius: 5
+                                        color: parent.hovered ? "#dd242424" : "#bb111111"
+                                    }
+                                }
+
+                                ToolButton {
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    width: root.railControlWidth
+                                    height: root.railControlHeight
+                                    z: 2
+                                    visible: genreList.contentWidth > genreList.width + 1
+                                             && genreList.contentX < genreList.contentWidth - genreList.width - 1
+                                    enabled: genreList.contentX < genreList.contentWidth - genreList.width - 1
+                                    text: "›"
+                                    onClicked: {
+                                        genreRailScroll.stop()
+                                        genreRailScroll.from = genreList.contentX
+                                        genreRailScroll.to = Math.min(genreList.contentWidth - genreList.width,
+                                                                      genreList.contentX + root.railStep)
+                                        genreRailScroll.start()
+                                    }
+                                    contentItem: Text {
+                                        text: "›"
+                                        color: "#ffffff"
+                                        font.pixelSize: 46
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                    background: Rectangle {
+                                        radius: 5
+                                        color: parent.hovered ? "#dd242424" : "#bb111111"
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -229,13 +617,17 @@ Item {
                         width: parent.width
                         spacing: 14
                         visible: root.entries.length > 0
+                                 && (root.catalogSection !== "home"
+                                     || root.filterText.trim().length > 0
+                                     || root.homeLayout === "posterWall")
 
                         Text {
-                            text: root.filterText.length > 0 ? "搜索结果"
+                            visible: root.catalogSection !== "home" || root.filterText.trim().length > 0
+                            text: root.filterText.trim().length > 0 ? "搜索结果"
                                   : root.catalogSection === "series" ? "电视剧"
                                   : root.catalogSection === "movies" ? "电影"
                                   : root.catalogSection === "favorites" ? "我的收藏"
-                                  : "为你推荐"
+                                  : ""
                             color: "#f5f5f1"
                             font.pixelSize: 21
                             font.weight: Font.DemiBold
@@ -257,9 +649,14 @@ Item {
                         width: parent.width
                         height: 180
                         visible: root.entries.length === 0
+                                 || (root.catalogSection === "home"
+                                     && root.homeLayout === "genreRows"
+                                     && root.filterText.trim().length === 0
+                                     && root.genreSections.length === 0)
                         Text {
                             anchors.centerIn: parent
-                            text: root.filterText.length > 0 ? "没有找到相关影片"
+                            text: root.entries.length > 0 ? "还没有足够作品组成主题栏目"
+                                  : root.filterText.length > 0 ? "没有找到相关影片"
                                   : root.catalogSection === "favorites" ? "还没有收藏的影视"
                                   : root.catalogSection === "series" ? "还没有识别到电视剧"
                                   : root.catalogSection === "movies" ? "还没有识别到电影"
@@ -279,7 +676,7 @@ Item {
 
         Item {
             required property var modelData
-            width: allTitles.cellWidth - 12
+            width: ListView.view ? 172 : (GridView.view ? GridView.view.cellWidth - 12 : 172)
             height: width * 1.43 + 50
 
             Column {

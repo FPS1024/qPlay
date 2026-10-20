@@ -206,7 +206,7 @@ Item {
 
                     ComboBox {
                         id: seasonPicker
-                        visible: root.media && root.media.mediaType === "series"
+                        visible: !!(root.media && root.media.mediaType === "series")
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         model: root.media && root.media.seasons ? root.media.seasons : []
@@ -281,7 +281,7 @@ Item {
                     }
 
                     Text {
-                        visible: root.isMovie && root.media.sources && root.media.sources.length > 1
+                        visible: !!(root.isMovie && root.media.sources && root.media.sources.length > 1)
                         Layout.fillWidth: true
                         text: "播放源（" + (root.media && root.media.sourceCount
                                               ? root.media.sourceCount : 0) + "）"
@@ -292,7 +292,7 @@ Item {
 
                     ComboBox {
                         id: movieSourcePicker
-                        visible: root.isMovie && root.media.sources && root.media.sources.length > 1
+                        visible: !!(root.isMovie && root.media.sources && root.media.sources.length > 1)
                         Layout.fillWidth: true
                         Layout.preferredHeight: 44
                         model: root.media && root.media.sources ? root.media.sources : []
@@ -397,7 +397,7 @@ Item {
                     RowLayout {
                         spacing: 12
                         Text {
-                            visible: root.media && root.media.rating > 0
+                            visible: !!(root.media && root.media.rating > 0)
                             text: root.media && root.media.rating > 0
                                   ? "★ " + Number(root.media.rating).toFixed(1) : ""
                             color: "#f5c518"
@@ -411,14 +411,14 @@ Item {
                             font.pixelSize: 14
                         }
                         Text {
-                            visible: root.activeSourceInfo && root.activeSourceInfo.durationMs > 0
+                            visible: !!(root.activeSourceInfo && root.activeSourceInfo.durationMs > 0)
                             text: root.activeSourceInfo && root.activeSourceInfo.durationMs > 0 && root.engine
                                   ? root.engine.formatTime(root.activeSourceInfo.durationMs) : ""
                             color: "#d4d4d4"
                             font.pixelSize: 14
                         }
                         Text {
-                            visible: root.activeSourceInfo && root.activeSourceInfo.width > 0
+                            visible: !!(root.activeSourceInfo && root.activeSourceInfo.width > 0)
                             text: root.activeSourceInfo && root.activeSourceInfo.width > 0
                                   ? root.activeSourceInfo.width + " × " + root.activeSourceInfo.height : ""
                             color: "#d4d4d4"
@@ -426,8 +426,37 @@ Item {
                         }
                     }
 
+                    Flow {
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 720
+                        spacing: 8
+                        visible: !!(root.media && root.media.genres && root.media.genres.length > 0)
+
+                        Repeater {
+                            model: root.media && root.media.genres ? root.media.genres : []
+
+                            delegate: Rectangle {
+                                required property var modelData
+
+                                radius: 12
+                                color: "#252525"
+                                border.color: "#484848"
+                                implicitWidth: genreName.implicitWidth + 22
+                                implicitHeight: 28
+
+                                Text {
+                                    id: genreName
+                                    anchors.centerIn: parent
+                                    text: modelData.name || ""
+                                    color: "#e5e5e5"
+                                    font.pixelSize: 12
+                                }
+                            }
+                        }
+                    }
+
                     Text {
-                        visible: root.media && root.media.mediaType === "episode"
+                        visible: !!(root.media && root.media.mediaType === "episode")
                         text: root.media && root.media.mediaType === "episode"
                               ? (root.media.seriesTitle || root.media.title) + "  ·  S"
                                 + (root.media.seasonNumber < 10 ? "0" : "") + root.media.seasonNumber + "E"
@@ -440,7 +469,7 @@ Item {
                     }
 
                     Text {
-                        visible: root.media && root.media.mediaType === "series"
+                        visible: !!(root.media && root.media.mediaType === "series")
                         text: root.media && root.media.episodeCount > 0
                               ? "剧集 · " + root.media.seasonCount + " 季 · " + root.media.episodeCount + " 集"
                               : "电视剧"
@@ -469,7 +498,7 @@ Item {
 
                         Button {
                             id: playButton
-                            visible: root.media && root.media.mediaType !== "series"
+                            visible: !!(root.media && root.media.mediaType !== "series")
                                      || root.selectedEpisode !== null
                             text: root.media && root.media.mediaType === "series"
                                   ? (root.selectedEpisode && root.selectedEpisode.positionMs > 0
@@ -529,7 +558,7 @@ Item {
             }
 
             ColumnLayout {
-                visible: root.media && root.media.mediaType === "series"
+                visible: !!(root.media && root.media.mediaType === "series")
                 Layout.fillWidth: true
                 Layout.leftMargin: root.contentSideMargin
                 Layout.rightMargin: root.contentSideMargin
@@ -766,7 +795,7 @@ Item {
                 }
 
                 Text {
-                    visible: root.selectedSeason && root.selectedSeason.episodes.length === 0
+                    visible: !!(root.selectedSeason && root.selectedSeason.episodes.length === 0)
                     text: "本季暂无可播放剧集。"
                     color: "#bdbdbd"
                     font.pixelSize: 14
